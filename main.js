@@ -78,7 +78,9 @@ function createWindow() {
   });
 
   // Hacer que la ventana aparezca en todos los escritorios virtuales (Spaces) de macOS
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  if (process.platform === 'darwin') {
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  }
 
   // Si esta máquina es el servidor central, cargamos desde localhost para saltarnos firewalls locales.
   // Si es un cliente, cargamos desde la IP del servidor central configurado.
