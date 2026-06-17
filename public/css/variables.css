@@ -1,0 +1,34 @@
+/* variables.css - Paleta de colores, fuentes y tokens globales */
+:root {
+  --bg-gradient-start: #0f172a;
+  --bg-gradient-end: #020617;
+  --glass-bg: rgba(30, 41, 59, 0.45);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-highlight: rgba(255, 255, 255, 0.03);
+  
+  --primary-color: #3b82f6;
+  --primary-hover: #60a5fa;
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  
+  --mood-feliz-bg: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(37, 99, 235, 0.4));
+  --mood-feliz-border: #3b82f6;
+  
+  --mood-concentrado-bg: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(109, 40, 217, 0.4));
+  --mood-concentrado-border: #8b5cf6;
+  
+  --mood-estresado-bg: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(185, 28, 28, 0.4));
+  --mood-estresado-border: #ef4444;
+  
+  --mood-cansado-bg: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(217, 119, 6, 0.4));
+  --mood-cansado-border: #f59e0b;
+  
+  --mood-energia-bg: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(4, 120, 87, 0.4));
+  --mood-energia-border: #10b981;
+  
+  --mood-social-bg: linear-gradient(135deg, rgba(236, 72, 153, 0.2), rgba(190, 24, 74, 0.4));
+  --mood-social-border: #ec4899;
+
+  --font-family: 'Outfit', sans-serif;
+  --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
