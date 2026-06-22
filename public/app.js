@@ -46,13 +46,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const PRESET_STICKERS = [
     { id: 'feliz', file: 'feliz.png', label: 'Feliz' },
     { id: 'estresado', file: 'estresado.jpg', label: 'Estresado' },
-    { id: 'grunon', file: 'gruñon.jpg', label: 'Gruñón' },
+    { id: 'grunon', file: 'grunon.jpg', label: 'Gruñón' },
     { id: 'triste', file: 'triste.jpg', label: 'Triste' },
     { id: 'concentrado', file: 'concentrado.png', label: 'Concentrado' },
     { id: 'dormilon', file: 'Dormilon.jpeg', label: 'Dormilón' },
     { id: 'chambeador', file: 'chambeador.jpg', label: 'Chambeador' },
     { id: 'bromista', file: 'bromista.jpg', label: 'Bromista' },
-    { id: 'ensenador', file: 'enseñador.jpg', label: 'Enseñador' },
+    { id: 'ensenador', file: 'ensenador.jpg', label: 'Enseñador' },
     { id: 'fortachon', file: 'fortachon.jpg', label: 'Fortachón' },
     { id: 'friolento', file: 'friolento.jpg', label: 'Friolento' },
     { id: 'miedoso', file: 'miedoso.jpg', label: 'Miedoso' }
