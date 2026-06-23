@@ -61,7 +61,7 @@ function createWindow() {
   });
 
   // Conectarse a la IP configurada
-  const targetUrl = `http://${config.serverIp}:3000/?platform=electron`;
+  const targetUrl = `http://${config.serverIp}:3030/?platform=electron`;
   win.loadURL(targetUrl);
 }
 
