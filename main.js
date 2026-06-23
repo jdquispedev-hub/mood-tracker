@@ -60,6 +60,9 @@ function createWindow() {
     }
   });
 
+  // Hacer que la ventana aparezca en todos los escritorios virtuales (Spaces) de macOS
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
   // Conectarse a la IP configurada
   const targetUrl = `http://${config.serverIp}:3030/?platform=electron`;
   win.loadURL(targetUrl);
