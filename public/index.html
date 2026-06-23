@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pitufo Moods - Estado de Ánimo del Equipo</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/png" href="/icon.png">
+  <link rel="apple-touch-icon" href="/icon.png">
+  <!-- Fuente Google Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Controles de Ventana Globales para Electron Widget -->
+  <div class="window-controls" id="global-window-controls">
+    <button class="win-control-btn win-minimize-btn" id="win-minimize-btn" title="Minimizar Widget">&minus;</button>
+    <button class="win-control-btn win-close-btn" id="win-close-btn" title="Cerrar Widget">&times;</button>
+  </div>
+
+  <div class="app-container">
+    
+    <!-- Pantalla de Login / Configuración Inicial -->
+    <div id="login-screen" class="glass-card login-card">
+      <div class="logo-area">
+        <img src="/icon.png" alt="Logo Pitufo Moods" class="app-logo">
+        <h1>Pitufo Moods</h1>
+        <p>¿Cómo te sientes hoy? Hazle saber a tu equipo.</p>
+      </div>
+      
+      <form id="login-form">
+        <div class="input-group">
+          <label for="username">Tu Nombre</label>
+          <input type="text" id="username" placeholder="Ej. Jesús" required autocomplete="off">
+        </div>
+
+        <div class="input-group hidden" id="password-group">
+          <label for="password">Contraseña (Admin)</label>
+          <input type="password" id="password" placeholder="Contraseña de Danna" autocomplete="off" style="width: 100%; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--glass-border); border-radius: 12px; padding: 14px 16px; color: var(--text-main); font-family: var(--font-family); font-size: 1rem; outline: none; transition: var(--transition-smooth);">
+        </div>
+        
+        <div class="input-group">
+          <label>Avatar: Elige Pitufo o Sube una Foto</label>
+          <div class="avatar-selector">
+            <label class="avatar-option">
+              <input type="radio" name="initial-avatar" value="pitufo-default" checked>
+              <span class="avatar-preview">🔵</span>
+            </label>
+            <label class="avatar-option">
+              <input type="radio" name="initial-avatar" value="pitufina">
+              <span class="avatar-preview">👱‍♀️</span>
+            </label>
+            <label class="avatar-option">
+              <input type="radio" name="initial-avatar" value="papa-pitufo">
+              <span class="avatar-preview">🎅</span>
+            </label>
+          </div>
+          
+          <div style="margin-top: 15px;">
+            <input type="file" id="avatar-upload" accept="image/*" style="display: none;">
+            <button type="button" id="upload-trigger-btn" class="btn btn-secondary" style="font-size: 0.85rem; padding: 10px 15px;">📷 Subir Foto Personalizada</button>
+            <span id="upload-status" style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-top: 5px; text-align: center;"></span>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Entrar al Workspace</button>
+      </form>
+    </div>
+
+    <!-- Interfaz Principal (Widget + Dashboard) -->
+    <div id="main-interface" class="main-layout hidden">
+      
+      <!-- Panel de Control Lateral / Widget Modificable -->
+      <aside class="sidebar glass-card">
+        
+        <!-- Vista Completa / Expandida del Widget -->
+        <div class="widget-expanded-content">
+          <div class="user-profile-header">
+            <div class="user-avatar-badge" id="current-user-badge">🔵</div>
+            <div class="user-info">
+              <h2 id="current-username-display">Cargando...</h2>
+              <span class="status-indicator">En línea</span>
+            </div>
+          </div>
+
+          <!-- Entrada de Estado Personalizado -->
+          <div class="input-group custom-status-group">
+            <label for="custom-status-input">¿Qué estás haciendo hoy? (Texto de Estado)</label>
+            <input type="text" id="custom-status-input" placeholder="Ej. Durmiendo, Almorzando, Ocupado..." autocomplete="off">
+          </div>
+
+          <!-- Galería de Stickers Rápidos -->
+          <div class="input-group stickers-gallery-group" style="margin-top: 15px;">
+            <label>Elige un Sticker Rápido</label>
+            <div class="stickers-gallery" id="stickers-gallery" style="display: flex; gap: 10px; overflow-x: auto; padding: 10px 5px; background: rgba(15, 23, 42, 0.4); border-radius: 12px; border: 1px solid var(--glass-border); -webkit-app-region: no-drag;">
+              <!-- Se inyectarán mediante JavaScript -->
+            </div>
+          </div>
+
+          <!-- Imagen de Estado Seleccionada -->
+          <div class="input-group status-image-group" style="margin-top: 20px;">
+            <label>Imagen de tu Estado Actual</label>
+            <div id="status-image-container" style="width: 100%; height: 140px; border: 2px dashed var(--glass-border); border-radius: 14px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; background: rgba(15, 23, 42, 0.4); transition: var(--transition-smooth); overflow: hidden; position: relative;">
+              <span id="status-image-placeholder" style="font-size: 0.85rem; color: var(--text-muted); text-align: center; pointer-events: none;">
+                📷 Haz clic para subir imagen de tu estado
+              </span>
+              <img id="status-image-preview" src="" class="hidden" style="width: 100%; height: 100%; object-fit: cover;">
+            </div>
+            <input type="file" id="status-image-upload" accept="image/*" style="display: none;">
+          </div>
+        </div> <!-- Fin de widget-expanded-content -->
+
+        <!-- Vista Mini / Colapsada (Super compacta para escritorio) -->
+        <div class="widget-mini-content hidden" id="widget-mini-content" title="Doble clic para expandir">
+          <button class="mini-expand-btn" id="mini-expand-btn" title="Expandir Widget" style="position: absolute; top: 5px; left: 5px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.8rem; -webkit-app-region: no-drag; z-index: 10;">⤢</button>
+          <div class="mini-status-image-container" id="mini-status-image-container" style="width: 70px; height: 70px; border-radius: 12px; overflow: hidden; margin-bottom: 5px; border: 2px solid rgba(255,255,255,0.2); display: flex; justify-content: center; align-items: center; background: rgba(0,0,0,0.3); pointer-events: none;">
+            <img id="mini-status-image" src="" style="width: 100%; height: 100%; object-fit: cover;">
+          </div>
+          <div class="mini-status-name" id="mini-status-name">jesus</div>
+          <div class="mini-status-text" id="mini-status-text">Disponible</div>
+        </div>
+
+        <div class="sidebar-actions">
+          <button id="toggle-mini-mode" class="btn btn-secondary">Colapsar a Mini</button>
+          <button id="toggle-widget-mode" class="btn btn-secondary">Modo Widget Compacto</button>
+          <button id="logout-btn" class="btn btn-text">Salir</button>
+        </div>
+      </aside>
+
+      <!-- Panel del Equipo (Dashboard principal) -->
+      <main class="dashboard-content">
+        <header class="dashboard-header glass-card">
+          <div class="header-titles">
+            <h1>Panel del Equipo</h1>
+            <p>Así están tus compañeros de trabajo en tiempo real</p>
+          </div>
+          <div class="system-stats">
+            <span class="stat-badge"><span id="user-count">0</span> conectados</span>
+          </div>
+        </header>
+
+        <div class="team-grid" id="team-grid">
+          <!-- Tarjetas de miembros del equipo se renderizarán aquí de forma dinámica -->
+          <div class="empty-state">
+            <p>Esperando a que se conecten tus compañeros...</p>
+          </div>
+        </div>
+      </main>
+
+    </div>
+
+  </div>
+
+  <!-- Contenedor para notificaciones flotantes en la app -->
+  <div class="notification-container" id="toast-container"></div>
+
+  <!-- Socket.io Cliente -->
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- Lógica JavaScript de la App -->
+  <script src="app.js"></script>
+</body>
+</html>

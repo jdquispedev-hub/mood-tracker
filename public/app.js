@@ -1,0 +1,530 @@
+document.addEventListener('DOMContentLoaded', () => {
+  const socket = io();
+  
+  // Elementos del DOM
+  const loginScreen = document.getElementById('login-screen');
+  const mainInterface = document.getElementById('main-interface');
+  const loginForm = document.getElementById('login-form');
+  const usernameInput = document.getElementById('username');
+  const currentUsernameDisplay = document.getElementById('current-username-display');
+  const currentUserBadge = document.getElementById('current-user-badge');
+  const teamGrid = document.getElementById('team-grid');
+  const userCount = document.getElementById('user-count');
+  const moodButtons = document.querySelectorAll('.mood-btn');
+  const toggleWidgetBtn = document.getElementById('toggle-widget-mode');
+  const logoutBtn = document.getElementById('logout-btn');
+  const toastContainer = document.getElementById('toast-container');
+  
+  // Elementos para Controles de Ventana
+  const winCloseBtn = document.getElementById('win-close-btn');
+  const winMinimizeBtn = document.getElementById('win-minimize-btn');
+  
+  // Elementos del Estado Personalizado y Modo Mini
+  const customStatusInput = document.getElementById('custom-status-input');
+  const toggleMiniBtn = document.getElementById('toggle-mini-mode');
+  const widgetMiniContent = document.getElementById('widget-mini-content');
+  const miniStatusImage = document.getElementById('mini-status-image');
+  const miniStatusName = document.getElementById('mini-status-name');
+  const miniStatusText = document.getElementById('mini-status-text');
+  const miniExpandBtn = document.getElementById('mini-expand-btn');
+
+  // Elementos para Carga de Imagen de Estado
+  const statusImageUpload = document.getElementById('status-image-upload');
+  const statusImageContainer = document.getElementById('status-image-container');
+  const statusImagePlaceholder = document.getElementById('status-image-placeholder');
+  const statusImagePreview = document.getElementById('status-image-preview');
+
+  // Elementos de Login Admin (Danna) y Foto Personalizada
+  const passwordGroup = document.getElementById('password-group');
+  const passwordInput = document.getElementById('password');
+  const avatarUploadInput = document.getElementById('avatar-upload');
+  const uploadTriggerBtn = document.getElementById('upload-trigger-btn');
+  const uploadStatus = document.getElementById('upload-status');
+  const stickersGallery = document.getElementById('stickers-gallery');
+  
+  // Lista de Stickers Reales en la carpeta public/stickers
+  const PRESET_STICKERS = [
+    { id: 'feliz', file: 'feliz.png', label: 'Feliz' },
+    { id: 'estresado', file: 'estresado.jpg', label: 'Estresado' },
+    { id: 'grunon', file: 'gruñon.webp', label: 'Gruñón' },
+    { id: 'triste', file: 'triste.jpg', label: 'Triste' },
+    { id: 'concentrado', file: 'concentrado.png', label: 'Concentrado' },
+    { id: 'dormilon', file: 'Dormilon.jpeg', label: 'Dormilón' },
+    { id: 'chambeador', file: 'chambeador.jpg', label: 'Chambeador' },
+    { id: 'bromista', file: 'bromista.webp', label: 'Bromista' },
+    { id: 'ensenador', file: 'enseñador.jpg', label: 'Enseñador' },
+    { id: 'fortachon', file: 'fortachon.webp', label: 'Fortachón' },
+    { id: 'friolento', file: 'friolento.jpg', label: 'Friolento' },
+    { id: 'miedoso', file: 'miedoso.webp', label: 'Miedoso' }
+  ];
+
+  let uploadedAvatarBase64 = null;
+  let uploadedStatusImageBase64 = null;
+  let currentUser = null;
+
+  // Detectar plataforma Electron
+  const urlParams = new URLSearchParams(window.location.search);
+  const isElectron = urlParams.get('platform') === 'electron';
+
+  if (isElectron) {
+    document.body.classList.add('electron');
+    document.body.classList.add('widget-mode');
+    toggleWidgetBtn.textContent = 'Ver Dashboard Completo';
+    winCloseBtn.classList.remove('hidden');
+    winMinimizeBtn.classList.remove('hidden');
+    
+    // Configurar acciones de ventana nativas
+    winCloseBtn.addEventListener('click', () => {
+      if (window.electronAPI) window.electronAPI.close();
+    });
+    
+    winMinimizeBtn.addEventListener('click', () => {
+      if (window.electronAPI) window.electronAPI.minimize();
+    });
+  } else {
+    // Ocultar botones de control si no es Electron (navegador estándar)
+    winCloseBtn.classList.add('hidden');
+    winMinimizeBtn.classList.add('hidden');
+    toggleMiniBtn.classList.add('hidden');
+  }
+
+  // Renderizar galería de stickers prediseñados
+  if (stickersGallery) {
+    stickersGallery.innerHTML = '';
+    PRESET_STICKERS.forEach(sticker => {
+      // Contenedor del sticker
+      const wrapper = document.createElement('div');
+      wrapper.className = 'sticker-item-wrapper';
+      wrapper.dataset.file = sticker.file;
+      wrapper.dataset.label = sticker.label;
+      wrapper.title = sticker.label;
+
+      const img = document.createElement('img');
+      img.src = `stickers/${sticker.file}`;
+      img.className = 'sticker-img';
+      
+      const span = document.createElement('span');
+      span.className = 'sticker-label';
+      span.textContent = sticker.label;
+      
+      // Fallback a imagen por defecto (logo) si no existe en la carpeta stickers
+      img.onerror = () => {
+        img.src = '/icon.png';
+      };
+      
+      wrapper.appendChild(img);
+      wrapper.appendChild(span);
+      
+      wrapper.addEventListener('click', () => {
+        // Remover clase seleccionada de los otros wrappers
+        document.querySelectorAll('.sticker-item-wrapper').forEach(el => el.classList.remove('selected'));
+        wrapper.classList.add('selected');
+        
+        // Asignar como imagen de estado
+        const path = `stickers/${sticker.file}`;
+        uploadedStatusImageBase64 = path;
+        
+        statusImagePreview.src = path;
+        statusImagePreview.classList.remove('hidden');
+        statusImagePlaceholder.classList.add('hidden');
+        
+        // Forzar actualización del texto de estado con el nombre del sticker
+        if (customStatusInput) {
+          customStatusInput.value = sticker.label;
+        }
+        
+        if (currentUser) {
+          currentUser.statusImage = path;
+          currentUser.customStatus = sticker.label;
+          localStorage.setItem('pitufo_user', JSON.stringify(currentUser));
+          
+          socket.emit('update-mood', { 
+            statusImage: path,
+            customStatus: sticker.label
+          });
+          updateMiniView();
+        }
+      });
+      
+      stickersGallery.appendChild(wrapper);
+    });
+  }
+
+  // Mostrar contraseña si es admin (Danna)
+  usernameInput.addEventListener('input', () => {
+    const name = usernameInput.value.trim().toLowerCase();
+    if (name === 'danna') {
+      passwordGroup.classList.remove('hidden');
+      passwordInput.required = true;
+    } else {
+      passwordGroup.classList.add('hidden');
+      passwordInput.required = false;
+      passwordInput.value = '';
+    }
+  });
+
+  // Escuchar botón de carga de imagen personalizada
+  if (uploadTriggerBtn) {
+    uploadTriggerBtn.addEventListener('click', () => {
+      avatarUploadInput.click();
+    });
+  }
+
+  if (avatarUploadInput) {
+    avatarUploadInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        if (file.size > 1024 * 1024) {
+          alert('La imagen es demasiado grande. Por favor sube una de menos de 1MB.');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          uploadedAvatarBase64 = event.target.result;
+          uploadStatus.textContent = '📷 ¡Foto cargada con éxito!';
+          uploadStatus.style.color = '#10b981';
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  }
+
+  // Evento Login
+  loginForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = usernameInput.value.trim();
+    
+    // Validar contraseña si es Danna
+    if (name.toLowerCase() === 'danna') {
+      if (passwordInput.value !== '123456') {
+        alert('Contraseña incorrecta para el administrador Danna.');
+        return;
+      }
+    }
+    
+    // Obtener avatar (la imagen subida o el pitufo de radio button)
+    const avatar = uploadedAvatarBase64 || document.querySelector('input[name="initial-avatar"]:checked').value;
+    
+    currentUser = { 
+      name, 
+      avatar, 
+      mood: 'feliz', 
+      customStatus: '',
+      role: name.toLowerCase() === 'danna' ? 'admin' : 'user'
+    };
+    localStorage.setItem('pitufo_user', JSON.stringify(currentUser));
+    enterWorkspace(currentUser);
+  });
+
+  function enterWorkspace(user) {
+    loginScreen.classList.add('hidden');
+    mainInterface.classList.remove('hidden');
+    
+    // Configurar cabecera de perfil
+    currentUsernameDisplay.textContent = user.name;
+    currentUserBadge.innerHTML = getAvatarElement(user.avatar);
+    
+    // Rellenar estado personalizado si existe
+    if (customStatusInput) {
+      customStatusInput.value = user.customStatus || '';
+    }
+
+    // Mostrar imagen de estado si ya existe
+    if (user.statusImage) {
+      statusImagePreview.src = user.statusImage;
+      statusImagePreview.classList.remove('hidden');
+      statusImagePlaceholder.classList.add('hidden');
+      uploadedStatusImageBase64 = user.statusImage;
+
+      // Seleccionar sticker activo en la galería si coincide
+      if (user.statusImage.startsWith('stickers/')) {
+        const fileName = user.statusImage.split('/')[1];
+        const stickerImg = document.querySelector(`.sticker-item-wrapper[data-file="${fileName}"]`);
+        if (stickerImg) {
+          stickerImg.classList.add('selected');
+        }
+      }
+    } else {
+      statusImagePreview.src = '';
+      statusImagePreview.classList.add('hidden');
+      statusImagePlaceholder.classList.remove('hidden');
+      uploadedStatusImageBase64 = null;
+    }
+    
+    // Unirse al WebSocket
+    socket.emit('user-join', user);
+    
+    // Actualizar vista miniatura
+    updateMiniView();
+
+    // Solicitar permiso de notificaciones de escritorio
+    if (Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }
+
+  // Mapear avatars a emojis o etiqueta img si es personalizado
+  function getAvatarElement(avatarData) {
+    if (avatarData && avatarData.startsWith('data:image')) {
+      return `<img src="${avatarData}" class="avatar-img" alt="Avatar">`;
+    }
+    switch (avatarData) {
+      case 'pitufina': return '👱‍♀️';
+      case 'papa-pitufo': return '🎅';
+      default: return '🔵';
+    }
+  }
+
+  // Mapear moods a emojis de pitufos estilizados
+  const moodMap = {
+    feliz: { emoji: '🔵😊', label: 'Pitufo Feliz', desc: 'A buen ritmo / Disponible' },
+    concentrado: { emoji: '🔵🧠', label: 'Pitufo Filósofo', desc: 'Concentrado / Pensando' },
+    estresado: { emoji: '🔵😠', label: 'Pitufo Gruñón', desc: 'Estresado / No molestar' },
+    cansado: { emoji: '🔵😴', label: 'Pitufo Dormilón', desc: 'Cansado / Con sueño' },
+    energia: { emoji: '🔵💪', label: 'Pitufo Fortachón', desc: 'A tope de energía' },
+    social: { emoji: '🔵🎉', label: 'Pitufo Bromista', desc: 'Listo para conversar / jugar' }
+  };
+
+  // Función para actualizar la vista reducida del mini widget
+  function updateMiniView() {
+    if (!currentUser) return;
+    
+    // Obtener la imagen de estado (si no hay, usar avatar si es imagen, o /icon.png como fallback)
+    let statusImgSrc = '/icon.png';
+    if (currentUser.statusImage) {
+      statusImgSrc = currentUser.statusImage;
+    } else if (currentUser.avatar && currentUser.avatar.startsWith('data:image')) {
+      statusImgSrc = currentUser.avatar;
+    }
+    
+    if (miniStatusImage) {
+      miniStatusImage.src = statusImgSrc;
+    }
+    
+    miniStatusName.textContent = currentUser.name;
+    miniStatusText.textContent = currentUser.customStatus || 'Disponible';
+  }
+
+  // Escuchar entrada de estado personalizado (texto)
+  if (customStatusInput) {
+    customStatusInput.addEventListener('input', () => {
+      const text = customStatusInput.value.trim();
+      if (currentUser) {
+        currentUser.customStatus = text;
+        localStorage.setItem('pitufo_user', JSON.stringify(currentUser));
+        socket.emit('update-mood', { customStatus: text });
+        updateMiniView();
+      }
+    });
+  }
+
+  // Escuchar carga de imagen de estado
+  if (statusImageContainer) {
+    statusImageContainer.addEventListener('click', () => {
+      statusImageUpload.click();
+    });
+  }
+
+  if (statusImageUpload) {
+    statusImageUpload.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        if (file.size > 1024 * 1024) {
+          alert('La imagen es demasiado grande. Por favor sube una de menos de 1MB.');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          uploadedStatusImageBase64 = event.target.result;
+          statusImagePreview.src = uploadedStatusImageBase64;
+          statusImagePreview.classList.remove('hidden');
+          statusImagePlaceholder.classList.add('hidden');
+          
+          if (currentUser) {
+            currentUser.statusImage = uploadedStatusImageBase64;
+            localStorage.setItem('pitufo_user', JSON.stringify(currentUser));
+            socket.emit('update-mood', { statusImage: uploadedStatusImageBase64 });
+            updateMiniView();
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  }
+
+  // Alternar Modo Mini (Super Compacto)
+  if (toggleMiniBtn) {
+    toggleMiniBtn.addEventListener('click', toggleMiniMode);
+  }
+  if (miniExpandBtn) {
+    miniExpandBtn.addEventListener('click', toggleMiniMode);
+  }
+  if (widgetMiniContent) {
+    // Doble clic para expandir de nuevo
+    widgetMiniContent.addEventListener('dblclick', toggleMiniMode);
+  }
+
+  function toggleMiniMode() {
+    document.body.classList.toggle('mini-mode');
+    const isMini = document.body.classList.contains('mini-mode');
+    
+    if (isMini) {
+      toggleMiniBtn.textContent = 'Expandir Widget';
+      if (window.electronAPI) window.electronAPI.resize(130, 150);
+    } else {
+      toggleMiniBtn.textContent = 'Colapsar a Mini';
+      if (window.electronAPI) {
+        const isWidget = document.body.classList.contains('widget-mode');
+        if (isWidget) {
+          window.electronAPI.resize(340, 600);
+        } else {
+          window.electronAPI.resize(1024, 768);
+        }
+      }
+    }
+  }
+
+  // Alternar el Modo Widget Compacto
+  toggleWidgetBtn.addEventListener('click', () => {
+    // Si estamos en modo mini, quitarlo primero
+    if (document.body.classList.contains('mini-mode')) {
+      toggleMiniMode();
+    }
+    
+    document.body.classList.toggle('widget-mode');
+    const isWidget = document.body.classList.contains('widget-mode');
+    toggleWidgetBtn.textContent = isWidget ? 'Ver Dashboard Completo' : 'Modo Widget Compacto';
+    
+    // Ajustar tamaño de ventana
+    if (window.electronAPI) {
+      if (isWidget) {
+        window.electronAPI.resize(340, 600);
+      } else {
+        window.electronAPI.resize(1024, 768); // Tamaño normal de dashboard completo
+      }
+    }
+  });
+
+  // Salir / Logout
+  logoutBtn.addEventListener('click', () => {
+    localStorage.removeItem('pitufo_user');
+    location.reload();
+  });
+
+  // WebSocket: Recibir actualizaciones de la lista de usuarios
+  socket.on('update-users', (usersList) => {
+    // Filtrar a nosotros mismos para el panel si queremos, o dejar a todos
+    userCount.textContent = usersList.length;
+    
+    if (usersList.length === 0) {
+      teamGrid.innerHTML = `
+        <div class="empty-state">
+          <p>Esperando a que se conecten tus compañeros...</p>
+        </div>`;
+      return;
+    }
+
+    teamGrid.innerHTML = '';
+    
+    usersList.forEach(user => {
+      // No mostrar al propio usuario en la lista de compañeros para no redundar
+      if (user.id === socket.id) return;
+      
+      const memberCard = document.createElement('div');
+      memberCard.className = `member-card`;
+      
+      const displayStatus = user.customStatus || 'Disponible';
+      const statusImgSrc = user.statusImage || '/icon.png';
+      const avatarHtml = getAvatarElement(user.avatar);
+      
+      memberCard.innerHTML = `
+        <div class="member-status-img-wrapper" style="width: 100%; height: 160px; border-radius: 12px; overflow: hidden; position: relative; margin-bottom: 15px; background: rgba(0,0,0,0.3);">
+          <img src="${statusImgSrc}" style="width: 100%; height: 100%; object-fit: cover;">
+          <div class="member-avatar-badge-corner" style="position: absolute; bottom: 8px; right: 8px; width: 36px; height: 36px; border-radius: 50%; overflow: hidden; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; background: #1e293b;">
+            ${avatarHtml}
+          </div>
+        </div>
+        <div class="member-name" style="font-size: 1.1rem; font-weight: 700; color: var(--text-main);">${user.name}</div>
+        <div class="member-status-text" style="font-size: 0.9rem; font-weight: 600; color: #60a5fa; margin-top: 5px; background: rgba(96, 165, 250, 0.1); padding: 4px 10px; border-radius: 8px;">${displayStatus}</div>
+        <div class="member-time" style="margin-top: 12px; font-size: 0.75rem; color: var(--text-muted);">Actualizado: ${user.updatedTime}</div>
+      `;
+      
+      teamGrid.appendChild(memberCard);
+    });
+
+    if (teamGrid.children.length === 0) {
+      teamGrid.innerHTML = `
+        <div class="empty-state">
+          <p>Estás conectado solo. Comparte tu IP local para que otros se unan.</p>
+        </div>`;
+    }
+  });
+
+  // WebSocket: Alguien cambió de estado
+  socket.on('status-notification', (data) => {
+    const statusText = data.customStatus || 'Disponible';
+    
+    // Crear notificación visual tipo Toast dentro de la app
+    showToast(data.name, '📢', statusText, false);
+    
+    // Notificación nativa del Navegador/OS si la pestaña no está activa
+    if (document.hidden && Notification.permission === 'granted') {
+      new Notification(`¡Estado de ${data.name}!`, {
+        body: `${data.name} actualizó a: "${statusText}"`,
+        icon: '/icon.png'
+      });
+    }
+  });
+
+  // Función para mostrar Toast Notifications
+  function showToast(name, emoji, moodLabel, isUrgent) {
+    const toast = document.createElement('div');
+    toast.className = `toast ${isUrgent ? 'urgent' : ''}`;
+    
+    toast.innerHTML = `
+      <div style="font-size: 1.8rem;">${emoji}</div>
+      <div class="toast-content">
+        <h4>${name} cambió de ánimo</h4>
+        <p>Ahora está como ${moodLabel}</p>
+      </div>
+    `;
+    
+    toastContainer.appendChild(toast);
+    
+    // Auto-eliminar después de 4 segundos
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(20px)';
+      setTimeout(() => {
+        toast.remove();
+      }, 300);
+    }, 4000);
+  }
+
+  // Cargar usuario guardado si existe (Al final de la inicialización)
+  const savedUser = localStorage.getItem('pitufo_user');
+  if (savedUser) {
+    currentUser = JSON.parse(savedUser);
+    usernameInput.value = currentUser.name;
+    
+    // Restaurar avatar
+    if (currentUser.avatar && currentUser.avatar.startsWith('data:image')) {
+      if (uploadStatus) {
+        uploadStatus.textContent = '📸 ¡Tu foto personalizada está cargada!';
+        uploadStatus.style.color = '#10b981';
+      }
+      uploadedAvatarBase64 = currentUser.avatar;
+    } else {
+      const avatarInput = document.querySelector(`input[name="initial-avatar"][value="${currentUser.avatar}"]`);
+      if (avatarInput) avatarInput.checked = true;
+    }
+    
+    // Entrar directamente
+    enterWorkspace(currentUser);
+  } else {
+    // Si no hay usuario guardado (pantalla de login), asegurar el tamaño inicial del widget
+    if (isElectron && window.electronAPI) {
+      window.electronAPI.resize(340, 600);
+    }
+  }
+});

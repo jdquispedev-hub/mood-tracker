@@ -1,0 +1,5 @@
+node_modules/
+PitufoMoods-darwin-arm64/
+PitufoMoods-darwin-arm64.zip
+.DS_Store
+config.json
