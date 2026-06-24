@@ -5,7 +5,9 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  maxHttpBufferSize: 10 * 1024 * 1024 // Permitir payloads de hasta 10MB (Imágenes/Gifs)
+});
 
 const PORT = process.env.PORT || 3030;
 
@@ -15,6 +17,65 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Estado en memoria de los usuarios activos
 // Estructura: { socketId: { name, mood, avatar, updatedTime } }
 const activeUsers = {};
+
+// --- PERSISTENCIA DE CHAT Y TAREAS ---
+const fs = require('fs');
+const MESSAGES_FILE = path.join(__dirname, 'messages.json');
+const TASKS_FILE = path.join(__dirname, 'tasks.json');
+const COMPLETED_TASKS_FILE = path.join(__dirname, 'completed_tasks.json');
+
+let messages = [];
+let tasks = [];
+let completedTasks = [];
+
+// Cargar datos al iniciar
+try {
+  if (fs.existsSync(MESSAGES_FILE)) {
+    messages = JSON.parse(fs.readFileSync(MESSAGES_FILE, 'utf8'));
+  }
+} catch (err) {
+  console.error('Error cargando mensajes:', err);
+}
+
+try {
+  if (fs.existsSync(TASKS_FILE)) {
+    tasks = JSON.parse(fs.readFileSync(TASKS_FILE, 'utf8'));
+  }
+} catch (err) {
+  console.error('Error cargando tareas:', err);
+}
+
+try {
+  if (fs.existsSync(COMPLETED_TASKS_FILE)) {
+    completedTasks = JSON.parse(fs.readFileSync(COMPLETED_TASKS_FILE, 'utf8'));
+  }
+} catch (err) {
+  console.error('Error cargando tareas completadas:', err);
+}
+
+function saveMessages() {
+  try {
+    fs.writeFileSync(MESSAGES_FILE, JSON.stringify(messages, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Error guardando mensajes:', err);
+  }
+}
+
+function saveTasks() {
+  try {
+    fs.writeFileSync(TASKS_FILE, JSON.stringify(tasks, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Error guardando tareas:', err);
+  }
+}
+
+function saveCompletedTasks() {
+  try {
+    fs.writeFileSync(COMPLETED_TASKS_FILE, JSON.stringify(completedTasks, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Error guardando tareas completadas:', err);
+  }
+}
 
 io.on('connection', (socket) => {
   console.log(`Usuario conectado: ${socket.id}`);
@@ -33,6 +94,9 @@ io.on('connection', (socket) => {
     // Enviar la lista de todos los usuarios a todos
     io.emit('update-users', Object.values(activeUsers));
     console.log(`Usuario registrado: ${activeUsers[socket.id].name}`);
+
+    // Enviar mensajes, tareas y tareas completadas existentes al usuario que entra
+    socket.emit('init-data', { messages, tasks, completedTasks });
   });
 
   // Cuando un usuario cambia su estado o ingresa texto libre/imagen de estado
@@ -59,6 +123,84 @@ io.on('connection', (socket) => {
       
       console.log(`${activeUsers[socket.id].name} actualizó su estado: "${activeUsers[socket.id].customStatus}"`);
     }
+  });
+
+  // --- EVENTOS DEL CHAT ---
+  socket.on('send-chat-message', (msgText) => {
+    const user = activeUsers[socket.id];
+    if (user) {
+      const newMsg = {
+        id: Date.now().toString() + '-' + Math.floor(Math.random() * 1000),
+        sender: user.name,
+        avatar: user.avatar,
+        text: msgText,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      messages.push(newMsg);
+      // Mantener solo los últimos 50 mensajes para no sobrecargar el archivo JSON
+      if (messages.length > 50) messages.shift();
+      saveMessages();
+      io.emit('new-chat-message', newMsg);
+    }
+  });
+
+  // --- EVENTOS DE TAREAS ---
+  socket.on('create-task', (taskData) => {
+    const user = activeUsers[socket.id];
+    if (user) {
+      const newTask = {
+        id: Date.now().toString() + '-' + Math.floor(Math.random() * 1000),
+        title: taskData.title,
+        assignedTo: taskData.assignedTo || 'Todos',
+        creator: user.name,
+        status: 'pending', // pending, completed
+        createdTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      tasks.push(newTask);
+      saveTasks();
+      io.emit('task-created', newTask);
+    }
+  });
+
+  socket.on('update-task-status', (taskUpdate) => {
+    const task = tasks.find(t => t.id === taskUpdate.id);
+    if (task) {
+      task.status = taskUpdate.status;
+      saveTasks();
+      io.emit('task-updated', task);
+
+      // Si la tarea se marca como completada, se elimina de tareas activas tras 3 segundos y se añade a completadas
+      if (task.status === 'completed') {
+        setTimeout(() => {
+          const currentTask = tasks.find(t => t.id === taskUpdate.id);
+          if (currentTask && currentTask.status === 'completed') {
+            tasks = tasks.filter(t => t.id !== taskUpdate.id);
+            saveTasks();
+            
+            // Añadir a tareas completadas
+            currentTask.completedTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            completedTasks.push(currentTask);
+            // Limitar el historial a las últimas 50 tareas
+            if (completedTasks.length > 50) completedTasks.shift();
+            saveCompletedTasks();
+
+            io.emit('task-archived', { taskId: taskUpdate.id, archivedTask: currentTask });
+          }
+        }, 3000);
+      }
+    }
+  });
+
+  socket.on('delete-task', (taskId) => {
+    tasks = tasks.filter(t => t.id !== taskId);
+    saveTasks();
+    io.emit('task-deleted', taskId);
+  });
+
+  socket.on('clear-task-history', () => {
+    completedTasks = [];
+    saveCompletedTasks();
+    io.emit('task-history-cleared');
   });
 
   // Desconexión

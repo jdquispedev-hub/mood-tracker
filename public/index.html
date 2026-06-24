@@ -14,6 +14,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
 </head>
 <body>
+  <!-- Barra invisible superior para arrastrar la ventana en cualquier modo -->
+  <div class="drag-handle-bar"></div>
+
   <!-- Controles de Ventana Globales para Electron Widget -->
   <div class="window-controls" id="global-window-controls">
     <button class="win-control-btn win-minimize-btn" id="win-minimize-btn" title="Minimizar Widget">&minus;</button>
@@ -141,10 +144,66 @@
           </div>
         </header>
 
-        <div class="team-grid" id="team-grid">
-          <!-- Tarjetas de miembros del equipo se renderizarán aquí de forma dinámica -->
-          <div class="empty-state">
-            <p>Esperando a que se conecten tus compañeros...</p>
+        <div class="dashboard-body">
+          <div class="team-grid" id="team-grid">
+            <!-- Tarjetas de miembros del equipo se renderizarán aquí de forma dinámica -->
+            <div class="empty-state">
+              <p>Esperando a que se conecten tus compañeros...</p>
+            </div>
+          </div>
+
+          <!-- Panel de Colaboración (Chat + Tareas) -->
+          <div class="collab-panel glass-card">
+            <div class="collab-tabs">
+              <button type="button" class="collab-tab active" data-tab="chat-tab-content">💬 Chat</button>
+              <button type="button" class="collab-tab" data-tab="tasks-tab-content">📋 Tareas</button>
+            </div>
+
+            <!-- Contenido del Chat -->
+            <div class="collab-tab-content" id="chat-tab-content">
+              <div class="chat-messages" id="chat-messages-container">
+                <div class="chat-empty-state">No hay mensajes aún. ¡Comienza la conversación!</div>
+              </div>
+              <form id="chat-form" class="chat-input-area">
+                <input type="text" id="chat-input" placeholder="Escribe un mensaje..." required autocomplete="off">
+                <button type="submit" class="btn-chat-send">➤</button>
+              </form>
+            </div>
+
+            <!-- Contenido de Tareas -->
+            <div class="collab-tab-content hidden" id="tasks-tab-content">
+              <div class="tasks-header">
+                <h3>Tareas del Equipo</h3>
+                <button type="button" id="show-add-task-btn" class="btn-mini-task">+</button>
+              </div>
+
+              <!-- Formulario de Creación de Tareas -->
+              <form id="task-form" class="task-form-expanded hidden">
+                <input type="text" id="task-title-input" placeholder="¿Qué hay que hacer?" required autocomplete="off">
+                <select id="task-assignee-select" class="task-select">
+                  <option value="Todos">Asignar a: Todos</option>
+                </select>
+                <div class="task-form-actions">
+                  <button type="submit" class="btn btn-primary btn-sm-task">Crear</button>
+                  <button type="button" id="cancel-task-btn" class="btn btn-secondary btn-sm-task">Cancelar</button>
+                </div>
+              </form>
+
+              <div class="tasks-list" id="tasks-list-container">
+                <div class="tasks-empty-state">¡Todo al día! No hay tareas pendientes.</div>
+              </div>
+
+              <!-- Historial de Tareas Completadas (Solo Visible para la Jefa/Admin) -->
+              <div class="tasks-history-section hidden" id="tasks-history-section">
+                <div class="history-header" style="margin-top: 15px; border-top: 1px solid var(--glass-border); padding-top: 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <h4 style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">📋 Logros del Día (Admin)</h4>
+                  <button type="button" id="clear-history-btn" style="background: transparent; border: none; color: var(--mood-estresado-border); font-size: 0.7rem; cursor: pointer; font-weight: 600; padding: 2px;">Limpiar</button>
+                </div>
+                <div id="tasks-history-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 120px; overflow-y: auto; font-size: 0.75rem; padding-right: 5px;">
+                  <div style="color: var(--text-muted); font-style: italic; text-align: center; margin-top: 10px;">Ningún logro registrado aún.</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </main>

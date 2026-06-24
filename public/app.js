@@ -174,8 +174,8 @@ document.addEventListener('DOMContentLoaded', () => {
     avatarUploadInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (file) {
-        if (file.size > 1024 * 1024) {
-          alert('La imagen es demasiado grande. Por favor sube una de menos de 1MB.');
+        if (file.size > 10 * 1024 * 1024) {
+          alert('La imagen es demasiado grande. Por favor sube una de menos de 10MB.');
           return;
         }
         const reader = new FileReader();
@@ -261,6 +261,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (Notification.permission === 'default') {
       Notification.requestPermission();
     }
+
+    // Mostrar sección de historial si es Admin (Danna)
+    const historySection = document.getElementById('tasks-history-section');
+    if (historySection) {
+      if (user.role === 'admin') {
+        historySection.classList.remove('hidden');
+      } else {
+        historySection.classList.add('hidden');
+      }
+    }
   }
 
   // Mapear avatars a emojis o etiqueta img si es personalizado
@@ -329,8 +339,8 @@ document.addEventListener('DOMContentLoaded', () => {
     statusImageUpload.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (file) {
-        if (file.size > 1024 * 1024) {
-          alert('La imagen es demasiado grande. Por favor sube una de menos de 1MB.');
+        if (file.size > 10 * 1024 * 1024) {
+          alert('La imagen es demasiado grande. Por favor sube una de menos de 10MB.');
           return;
         }
         const reader = new FileReader();
@@ -416,6 +426,22 @@ document.addEventListener('DOMContentLoaded', () => {
     // Filtrar a nosotros mismos para el panel si queremos, o dejar a todos
     userCount.textContent = usersList.length;
     
+    // Actualizar el dropdown de asignados en tareas
+    const taskAssigneeSelect = document.getElementById('task-assignee-select');
+    if (taskAssigneeSelect) {
+      const currentSelection = taskAssigneeSelect.value;
+      taskAssigneeSelect.innerHTML = '<option value="Todos">Asignar a: Todos</option>';
+      usersList.forEach(user => {
+        const option = document.createElement('option');
+        option.value = user.name;
+        option.textContent = user.name + (user.id === socket.id ? ' (Tú)' : '');
+        taskAssigneeSelect.appendChild(option);
+      });
+      if ([...taskAssigneeSelect.options].some(o => o.value === currentSelection)) {
+        taskAssigneeSelect.value = currentSelection;
+      }
+    }
+
     if (usersList.length === 0) {
       teamGrid.innerHTML = `
         <div class="empty-state">
@@ -500,6 +526,314 @@ document.addEventListener('DOMContentLoaded', () => {
       }, 300);
     }, 4000);
   }
+
+  // --- LÓGICA DEL PANEL DE COLABORACIÓN (CHAT & TAREAS) ---
+  let clientTasks = [];
+
+  // Control de Pestañas (Tabs)
+  const collabTabs = document.querySelectorAll('.collab-tab');
+  collabTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      collabTabs.forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.collab-tab-content').forEach(c => c.classList.add('hidden'));
+      
+      tab.classList.add('active');
+      const targetId = tab.dataset.tab;
+      document.getElementById(targetId).classList.remove('hidden');
+      
+      // Limpiar puntito de notificación
+      if (targetId === 'chat-tab-content') {
+        tab.textContent = '💬 Chat';
+      } else if (targetId === 'tasks-tab-content') {
+        tab.textContent = '📋 Tareas';
+      }
+      
+      // Auto-scroll chat al cambiar a pestaña chat
+      if (targetId === 'chat-tab-content') {
+        const container = document.getElementById('chat-messages-container');
+        if (container) container.scrollTop = container.scrollHeight;
+      }
+    });
+  });
+
+  // Chat: Enviar Mensaje
+  const chatForm = document.getElementById('chat-form');
+  const chatInput = document.getElementById('chat-input');
+  const chatMessagesContainer = document.getElementById('chat-messages-container');
+
+  if (chatForm) {
+    chatForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = chatInput.value.trim();
+      if (text) {
+        socket.emit('send-chat-message', text);
+        chatInput.value = '';
+      }
+    });
+  }
+
+  function appendChatMessage(msg) {
+    if (!chatMessagesContainer) return;
+    
+    // Remover empty state
+    const emptyState = chatMessagesContainer.querySelector('.chat-empty-state');
+    if (emptyState) emptyState.remove();
+
+    const isSelf = currentUser && msg.sender.toLowerCase() === currentUser.name.toLowerCase();
+    const bubble = document.createElement('div');
+    bubble.className = `chat-bubble ${isSelf ? 'self' : ''}`;
+    
+    bubble.innerHTML = `
+      <div class="chat-bubble-header">
+        <span class="chat-sender-name">${msg.sender}</span>
+        <span class="chat-time">${msg.time}</span>
+      </div>
+      <div class="chat-text">${escapeHTML(msg.text)}</div>
+    `;
+    
+    chatMessagesContainer.appendChild(bubble);
+    chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+  }
+
+  // Tareas: Mostrar/Ocultar Formulario
+  const showAddTaskBtn = document.getElementById('show-add-task-btn');
+  const taskForm = document.getElementById('task-form');
+  const cancelTaskBtn = document.getElementById('cancel-task-btn');
+  const taskTitleInput = document.getElementById('task-title-input');
+  const taskAssigneeSelect = document.getElementById('task-assignee-select');
+  const tasksListContainer = document.getElementById('tasks-list-container');
+
+  if (showAddTaskBtn && taskForm) {
+    showAddTaskBtn.addEventListener('click', () => {
+      taskForm.classList.toggle('hidden');
+      if (!taskForm.classList.contains('hidden')) {
+        taskTitleInput.focus();
+      }
+    });
+  }
+
+  if (cancelTaskBtn && taskForm) {
+    cancelTaskBtn.addEventListener('click', () => {
+      taskForm.classList.add('hidden');
+      taskTitleInput.value = '';
+    });
+  }
+
+  // Tareas: Crear Tarea
+  if (taskForm) {
+    taskForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const title = taskTitleInput.value.trim();
+      const assignedTo = taskAssigneeSelect.value;
+      
+      if (title) {
+        socket.emit('create-task', { title, assignedTo });
+        taskTitleInput.value = '';
+        taskForm.classList.add('hidden');
+      }
+    });
+  }
+
+  function renderTasksList(tasksList) {
+    if (!tasksListContainer) return;
+    
+    if (tasksList.length === 0) {
+      tasksListContainer.innerHTML = '<div class="tasks-empty-state">¡Todo al día! No hay tareas pendientes.</div>';
+      return;
+    }
+    
+    tasksListContainer.innerHTML = '';
+    tasksList.forEach(task => {
+      const isCompleted = task.status === 'completed';
+      const taskItem = document.createElement('div');
+      taskItem.className = `task-item ${isCompleted ? 'completed' : ''}`;
+      taskItem.dataset.id = task.id;
+      
+      taskItem.innerHTML = `
+        <div class="task-item-main">
+          <input type="checkbox" class="task-checkbox" ${isCompleted ? 'checked' : ''}>
+          <span class="task-title">${escapeHTML(task.title)}</span>
+        </div>
+        <div class="task-meta">
+          <span class="task-assignee">Para: ${task.assignedTo}</span>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <span style="font-size: 0.65rem; color: var(--text-muted);">Por: ${task.creator}</span>
+            <button class="task-delete-btn" title="Eliminar Tarea">&times;</button>
+          </div>
+        </div>
+      `;
+      
+      // Evento checkbox status
+      const checkbox = taskItem.querySelector('.task-checkbox');
+      checkbox.addEventListener('change', () => {
+        socket.emit('update-task-status', {
+          id: task.id,
+          status: checkbox.checked ? 'completed' : 'pending'
+        });
+      });
+      
+      // Evento eliminar
+      const deleteBtn = taskItem.querySelector('.task-delete-btn');
+      deleteBtn.addEventListener('click', () => {
+        if (confirm('¿Eliminar esta tarea?')) {
+          socket.emit('delete-task', task.id);
+        }
+      });
+      
+      tasksListContainer.appendChild(taskItem);
+    });
+  }
+
+  // Utilidad para sanitizar HTML
+  function escapeHTML(str) {
+    return str.replace(/[&<>'"]/g, 
+      tag => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        "'": '&#39;',
+        '"': '&quot;'
+      }[tag] || tag)
+    );
+  }
+
+  // --- OYENTES DE SOCKET PARA COLABORACIÓN ---
+
+  // Inicializar mensajes y tareas al entrar
+  socket.on('init-data', (data) => {
+    if (chatMessagesContainer) {
+      chatMessagesContainer.innerHTML = '';
+      if (data.messages && data.messages.length > 0) {
+        data.messages.forEach(msg => appendChatMessage(msg));
+      } else {
+        chatMessagesContainer.innerHTML = '<div class="chat-empty-state">No hay mensajes aún. ¡Comienza la conversación!</div>';
+      }
+    }
+    
+    if (data.tasks) {
+      clientTasks = data.tasks;
+      renderTasksList(clientTasks);
+    }
+
+    if (data.completedTasks) {
+      clientCompletedTasks = data.completedTasks;
+      renderCompletedTasksList(clientCompletedTasks);
+    }
+  });
+
+  // Chat: Recibir mensaje nuevo
+  socket.on('new-chat-message', (msg) => {
+    appendChatMessage(msg);
+    
+    // Notificación flotante si el mensaje es de otro usuario
+    if (currentUser && msg.sender.toLowerCase() !== currentUser.name.toLowerCase()) {
+      const activeTab = document.querySelector('.collab-tab.active');
+      if (!activeTab || activeTab.dataset.tab !== 'chat-tab-content') {
+        const chatTabButton = document.querySelector('.collab-tab[data-tab="chat-tab-content"]');
+        if (chatTabButton && !chatTabButton.textContent.includes('●')) {
+          chatTabButton.textContent = '💬 Chat ●';
+        }
+      }
+      
+      showToast(msg.sender, '💬', `Mensaje: "${msg.text.substring(0, 20)}${msg.text.length > 20 ? '...' : ''}"`, false);
+    }
+  });
+
+  // Tareas: Recibir creación
+  socket.on('task-created', (task) => {
+    clientTasks.push(task);
+    renderTasksList(clientTasks);
+    
+    // Notificación si es para nosotros
+    if (currentUser && (task.assignedTo.toLowerCase() === currentUser.name.toLowerCase() || task.assignedTo === 'Todos') && task.creator.toLowerCase() !== currentUser.name.toLowerCase()) {
+      showToast(task.creator, '📋', `Te asignó: "${task.title}"`, true);
+      
+      const activeTab = document.querySelector('.collab-tab.active');
+      if (!activeTab || activeTab.dataset.tab !== 'tasks-tab-content') {
+        const tasksTabButton = document.querySelector('.collab-tab[data-tab="tasks-tab-content"]');
+        if (tasksTabButton && !tasksTabButton.textContent.includes('●')) {
+          tasksTabButton.textContent = '📋 Tareas ●';
+        }
+      }
+    }
+  });
+
+  // Tareas: Recibir actualización
+  socket.on('task-updated', (updatedTask) => {
+    const idx = clientTasks.findIndex(t => t.id === updatedTask.id);
+    if (idx !== -1) {
+      clientTasks[idx] = updatedTask;
+      renderTasksList(clientTasks);
+    }
+  });
+
+  // Tareas: Recibir eliminación
+  socket.on('task-deleted', (taskId) => {
+    clientTasks = clientTasks.filter(t => t.id !== taskId);
+    renderTasksList(clientTasks);
+  });
+
+  let clientCompletedTasks = [];
+
+  function renderCompletedTasksList(completedList) {
+    const historyListContainer = document.getElementById('tasks-history-list');
+    if (!historyListContainer) return;
+    
+    if (completedList.length === 0) {
+      historyListContainer.innerHTML = '<div style="color: var(--text-muted); font-style: italic; text-align: center; margin-top: 10px;">Ningún logro registrado aún.</div>';
+      return;
+    }
+    
+    historyListContainer.innerHTML = '';
+    [...completedList].reverse().forEach(task => {
+      const item = document.createElement('div');
+      item.style.background = 'rgba(16, 185, 129, 0.05)';
+      item.style.border = '1px solid rgba(16, 185, 129, 0.15)';
+      item.style.padding = '8px 10px';
+      item.style.borderRadius = '8px';
+      item.style.color = 'var(--text-main)';
+      item.style.display = 'flex';
+      item.style.flexDirection = 'column';
+      item.style.gap = '2px';
+      item.style.marginBottom = '6px';
+      
+      item.innerHTML = `
+        <div style="font-weight: 600; text-decoration: line-through; opacity: 0.8;">${escapeHTML(task.title)}</div>
+        <div style="font-size: 0.65rem; color: var(--text-muted); display: flex; justify-content: space-between;">
+          <span>Hecho por: <b style="color: var(--primary-hover); text-transform: capitalize;">${task.assignedTo}</b></span>
+          <span>A las ${task.completedTime}</span>
+        </div>
+      `;
+      historyListContainer.appendChild(item);
+    });
+  }
+
+  const clearHistoryBtn = document.getElementById('clear-history-btn');
+  if (clearHistoryBtn) {
+    clearHistoryBtn.addEventListener('click', () => {
+      if (confirm('¿Vaciar todo el historial de tareas completadas del día?')) {
+        socket.emit('clear-task-history');
+      }
+    });
+  }
+
+  // Socket: Recibir vaciado de historial
+  socket.on('task-history-cleared', () => {
+    clientCompletedTasks = [];
+    renderCompletedTasksList(clientCompletedTasks);
+  });
+
+  // Socket: Recibir archivado de tarea
+  socket.on('task-archived', (data) => {
+    // Quitar de la lista de tareas activas locales
+    clientTasks = clientTasks.filter(t => t.id !== data.taskId);
+    renderTasksList(clientTasks);
+    
+    // Agregar al historial de completadas
+    clientCompletedTasks.push(data.archivedTask);
+    if (clientCompletedTasks.length > 50) clientCompletedTasks.shift();
+    renderCompletedTasksList(clientCompletedTasks);
+  });
 
   // Cargar usuario guardado si existe (Al final de la inicialización)
   const savedUser = localStorage.getItem('pitufo_user');
