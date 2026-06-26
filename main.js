@@ -63,8 +63,27 @@ function createWindow() {
   // Hacer que la ventana aparezca en todos los escritorios virtuales (Spaces) de macOS
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
-  // Conectarse a la IP configurada
-  const targetUrl = `http://${config.serverIp}:3030/?platform=electron`;
+  // Si esta máquina es el servidor central, cargamos desde localhost para saltarnos firewalls locales.
+  // Si es un cliente, cargamos desde la IP del servidor central configurado.
+  const host = config.isServer ? 'localhost' : config.serverIp;
+  const targetUrl = `http://${host}:3030/?platform=electron`;
+  console.log(`Cargando URL: ${targetUrl}`);
+
+  // Controlar fallas de carga (si la IP no responde o el puerto está ocupado)
+  win.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error(`Error al cargar: ${validatedURL} -> ${errorDescription} (${errorCode})`);
+    
+    // Si falló cargando la IP principal y no es localhost, reintentar con localhost
+    if (validatedURL.includes(config.serverIp) && config.serverIp !== 'localhost') {
+      console.log('Fallo de conexión central. Intentando localmente en localhost:3030...');
+      win.loadURL(`http://localhost:3030/?platform=electron`);
+    } else {
+      // Cargar página de error local para evitar que la ventana transparente quede invisible
+      const errorPage = path.join(__dirname, 'public', 'fallback-error.html');
+      win.loadFile(errorPage, { query: { ip: config.serverIp } });
+    }
+  });
+
   win.loadURL(targetUrl);
 }
 

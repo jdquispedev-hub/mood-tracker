@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Error de Conexión - Pitufo Moods</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      text-align: center;
+      box-sizing: border-box;
+      -webkit-app-region: drag;
+    }
+    .card {
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px;
+      padding: 25px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      max-width: 280px;
+      -webkit-app-region: no-drag;
+    }
+    h1 {
+      font-size: 1.2rem;
+      margin-top: 10px;
+      color: #ef4444;
+    }
+    p {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      line-height: 1.5;
+    }
+    .btn {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 20px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      margin-top: 15px;
+      cursor: pointer;
+      width: 100%;
+    }
+    .btn:hover {
+      background: #2563eb;
+    }
+    .close-btn {
+      background: transparent;
+      border: none;
+      color: #64748b;
+      font-size: 0.8rem;
+      cursor: pointer;
+      margin-top: 10px;
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div style="font-size: 2.5rem;">🔌</div>
+    <h1>Sin Conexión</h1>
+    <p>No se pudo conectar al servidor de Pitufo Moods en la dirección:</p>
+    <p style="font-family: monospace; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 6px; color: #60a5fa;" id="ip-display">...</p>
+    <p>Verifica que el servidor esté encendido y que estés conectado a la misma red de la oficina.</p>
+    <button class="btn" id="retry-btn">Reintentar Conexión</button>
+    <button class="close-btn" id="close-btn">Cerrar App</button>
+  </div>
+
+  <script>
+    // Obtener IP de los parámetros de consulta
+    const params = new URLSearchParams(window.location.search);
+    const ip = params.get('ip') || 'IP Desconocida';
+    document.getElementById('ip-display').textContent = ip;
+
+    // Enlace a eventos de Electron mediante el preload
+    document.getElementById('retry-btn').addEventListener('click', () => {
+      // Recargar la URL original solicitando al proceso de main
+      window.location.href = `http://${ip}:3030/?platform=electron`;
+    });
+
+    document.getElementById('close-btn').addEventListener('click', () => {
+      if (window.electronAPI) {
+        window.electronAPI.close();
+      } else {
+        window.close();
+      }
+    });
+  </script>
+</body>
+</html>
