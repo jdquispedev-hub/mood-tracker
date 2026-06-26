@@ -106,6 +106,7 @@ io.on('connection', (socket) => {
       avatar: userData.avatar || 'standard',
       customStatus: userData.customStatus || '',
       statusImage: userData.statusImage || '',
+      focusEnd: userData.focusEnd || null,
       updatedTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
     
@@ -125,6 +126,7 @@ io.on('connection', (socket) => {
       const oldStatus = activeUsers[socket.id].customStatus;
       if (moodData.customStatus !== undefined) activeUsers[socket.id].customStatus = moodData.customStatus;
       if (moodData.statusImage !== undefined) activeUsers[socket.id].statusImage = moodData.statusImage;
+      if (moodData.focusEnd !== undefined) activeUsers[socket.id].focusEnd = moodData.focusEnd;
       
       activeUsers[socket.id].updatedTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       
@@ -225,6 +227,22 @@ io.on('connection', (socket) => {
     if (sender && targetSocketId) {
       io.to(targetSocketId).emit('receive-buzz', { senderName: sender.name });
       console.log(`Zumbido enviado de ${sender.name} a socket ${targetSocketId}`);
+    }
+  });
+
+  socket.on('start-focus', (durationMs) => {
+    if (activeUsers[socket.id]) {
+      activeUsers[socket.id].focusEnd = Date.now() + (durationMs || 25 * 60 * 1000);
+      io.emit('update-users', Object.values(activeUsers));
+      console.log(`${activeUsers[socket.id].name} inició sesión de enfoque`);
+    }
+  });
+
+  socket.on('stop-focus', () => {
+    if (activeUsers[socket.id]) {
+      activeUsers[socket.id].focusEnd = null;
+      io.emit('update-users', Object.values(activeUsers));
+      console.log(`${activeUsers[socket.id].name} detuvo sesión de enfoque`);
     }
   });
 

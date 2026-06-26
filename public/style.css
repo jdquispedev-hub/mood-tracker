@@ -844,29 +844,56 @@ input[type="text"]:focus {
 }
 
 /* --- MODO MINI (Super Compacto) --- */
-.mini-mode {
-  padding: 0;
-  background: transparent;
-  min-height: auto;
-  overflow: hidden;
-  -webkit-app-region: drag !important; /* Toda la ventana es arrastrable */
+.mini-mode,
+.mini-mode html,
+.mini-mode body {
+  padding: 0 !important;
+  margin: 0 !important;
+  background: transparent !important;
+  min-height: auto !important;
+  height: 100vh !important;
+  width: 100vw !important;
+  overflow: hidden !important;
+  -webkit-app-region: drag !important;
 }
 
 .mini-mode .app-container {
-  max-width: 130px;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+}
+
+.mini-mode .main-layout {
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 0 !important;
 }
 
 .mini-mode .sidebar {
-  width: 130px;
-  height: 150px;
-  padding: 15px 10px 10px 10px;
-  border-radius: 20px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+  width: 100% !important;
+  height: 100% !important;
+  max-height: none !important;
+  position: static !important;
+  margin: 0 !important;
+  padding: 20px 12px 10px 12px !important;
+  border-radius: 20px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-items: center !important;
+  overflow: hidden !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.7) !important;
+  -webkit-app-region: drag !important;
 }
 
 .mini-mode .window-controls,
@@ -911,6 +938,7 @@ input[type="text"]:focus {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  pointer-events: none !important;
 }
 
 .mini-status-text {
@@ -921,12 +949,13 @@ input[type="text"]:focus {
   overflow: hidden;
   text-overflow: ellipsis;
   font-weight: 500;
+  pointer-events: none !important;
 }
 
 /* Controles reducidos para modo mini */
 .mini-mode .window-controls {
-  top: 8px;
-  right: 8px;
+  top: 12px;
+  right: 12px;
   gap: 6px;
   z-index: 99999;
 }
@@ -935,6 +964,10 @@ input[type="text"]:focus {
   width: 22px;
   height: 22px;
   font-size: 0.75rem;
+}
+
+.mini-mode .mini-expand-btn {
+  -webkit-app-region: no-drag !important;
 }
 
 /* Barra invisible para arrastrar la ventana desde el borde superior */
@@ -1476,4 +1509,114 @@ input[type="text"]:focus {
   border: 1px solid #ef4444 !important;
   animation: shake 0.5s ease-in-out;
   box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+}
+
+/* Pomodoro Focus Timer Styles */
+.focus-timer-card {
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  border-radius: 16px;
+  padding: 16px;
+  margin-top: 15px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.focus-timer-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.focus-tomato {
+  font-size: 1.4rem;
+  animation: pulse 2s infinite ease-in-out;
+  display: inline-block;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+.focus-timer-title {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #c084fc;
+}
+
+.focus-timer-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.timer-display {
+  font-size: 1.7rem;
+  font-weight: 800;
+  color: var(--text-main);
+  font-family: monospace;
+  letter-spacing: 1px;
+}
+
+.btn-focus {
+  background: #8b5cf6;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-family: var(--font-family);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+.btn-focus:hover {
+  background: #a855f7;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(139, 92, 246, 0.5);
+}
+
+.btn-focus.active {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
+  box-shadow: none;
+}
+
+.btn-focus.active:hover {
+  background: #ef4444;
+  color: white;
+}
+
+/* Card glow styling when a user is focusing */
+.member-card.focusing {
+  border-color: rgba(168, 85, 247, 0.5) !important;
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.4) !important;
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.5), rgba(88, 28, 135, 0.15)) !important;
+}
+
+.member-card.focusing::before {
+  background: #a855f7 !important;
+  height: 6px !important;
+}
+
+.focus-indicator-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  color: #c084fc;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-top: 6px;
 }

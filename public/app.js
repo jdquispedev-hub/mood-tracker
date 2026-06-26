@@ -257,6 +257,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Actualizar vista miniatura
     updateMiniView();
 
+    // Resume Focus Session if still active
+    if (user.focusEnd && user.focusEnd > Date.now()) {
+      const remaining = user.focusEnd - Date.now();
+      startFocusSession(remaining);
+    }
+
     // Solicitar permiso de notificaciones de escritorio
     if (Notification.permission === 'default') {
       Notification.requestPermission();
@@ -459,6 +465,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const memberCard = document.createElement('div');
       memberCard.className = `member-card`;
       
+      const isFocusing = user.focusEnd && user.focusEnd > Date.now();
+      if (isFocusing) {
+        memberCard.classList.add('focusing');
+      }
+      
       const displayStatus = user.customStatus || 'Disponible';
       const statusImgSrc = user.statusImage || '/icon.png';
       const avatarHtml = getAvatarElement(user.avatar);
@@ -473,6 +484,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
         <div class="member-name" style="font-size: 1.1rem; font-weight: 700; color: var(--text-main);">${user.name}</div>
         <div class="member-status-text" style="font-size: 0.9rem; font-weight: 600; color: #60a5fa; margin-top: 5px; background: rgba(96, 165, 250, 0.1); padding: 4px 10px; border-radius: 8px;">${displayStatus}</div>
+        ${isFocusing ? `<div class="focus-indicator-badge" data-end="${user.focusEnd}">🧠 Enfoque: --:--</div>` : ''}
         <div class="member-time" style="margin-top: 12px; font-size: 0.75rem; color: var(--text-muted);">Actualizado: ${user.updatedTime}</div>
       `;
       
@@ -1010,6 +1022,122 @@ document.addEventListener('DOMContentLoaded', () => {
       }, 300);
     }, 4500);
   }
+
+  // LÓGICA DEL POMODORO / MODO ENFOQUE
+  let focusTimerInterval = null;
+  const btnToggleFocus = document.getElementById('btn-toggle-focus');
+  const focusTimerDisplay = document.getElementById('focus-timer-display');
+
+  if (btnToggleFocus) {
+    btnToggleFocus.addEventListener('click', () => {
+      if (focusTimerInterval) {
+        stopFocusSession();
+      } else {
+        startFocusSession(25 * 60 * 1000); // 25 Minutos por defecto
+      }
+    });
+  }
+
+  function startFocusSession(durationMs) {
+    if (focusTimerInterval) clearInterval(focusTimerInterval);
+    
+    const end = Date.now() + durationMs;
+    if (currentUser) {
+      currentUser.focusEnd = end;
+      localStorage.setItem('pitufo_user', JSON.stringify(currentUser));
+    }
+    
+    socket.emit('start-focus', durationMs);
+    
+    if (btnToggleFocus) {
+      btnToggleFocus.textContent = 'Detener Enfoque';
+      btnToggleFocus.classList.add('active');
+    }
+    
+    updateTimerDisplay(durationMs);
+    
+    focusTimerInterval = setInterval(() => {
+      const left = Math.max(0, end - Date.now());
+      updateTimerDisplay(left);
+      
+      if (left <= 0) {
+        playDingSound();
+        showToast('Enfoque Pomodoro', '🍅', '¡Sesión de enfoque completada! Buen trabajo.', true);
+        stopFocusSession();
+      }
+    }, 1000);
+  }
+
+  function stopFocusSession() {
+    if (focusTimerInterval) {
+      clearInterval(focusTimerInterval);
+      focusTimerInterval = null;
+    }
+    
+    if (currentUser) {
+      currentUser.focusEnd = null;
+      localStorage.setItem('pitufo_user', JSON.stringify(currentUser));
+    }
+    
+    socket.emit('stop-focus');
+    
+    if (btnToggleFocus) {
+      btnToggleFocus.textContent = 'Iniciar Enfoque';
+      btnToggleFocus.classList.remove('active');
+    }
+    if (focusTimerDisplay) {
+      focusTimerDisplay.textContent = '25:00';
+    }
+  }
+
+  function updateTimerDisplay(ms) {
+    if (!focusTimerDisplay) return;
+    const totalSeconds = Math.round(ms / 1000);
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    focusTimerDisplay.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  function playDingSound() {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime); // Sweet campana A5 note
+      gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.5);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 1.5);
+    } catch (err) {
+      console.error('Error al reproducir audio de campana:', err);
+    }
+  }
+
+  // Intervalo global para actualizar en tiempo real los contadores de enfoque de los compañeros
+  setInterval(() => {
+    const badges = document.querySelectorAll('.focus-indicator-badge');
+    badges.forEach(badge => {
+      const end = parseInt(badge.dataset.end);
+      const leftMs = Math.max(0, end - Date.now());
+      const leftSecs = Math.round(leftMs / 1000);
+      
+      if (leftSecs <= 0) {
+        badge.textContent = '🧠 Enfoque Terminado';
+        const card = badge.closest('.member-card');
+        if (card) {
+          card.classList.remove('focusing');
+        }
+        badge.remove();
+      } else {
+        const mins = Math.floor(leftSecs / 60);
+        const secs = leftSecs % 60;
+        badge.textContent = `🧠 Enfoque: ${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      }
+    });
+  }, 1000);
 
   // Cargar usuario guardado si existe (Al final de la inicialización)
   const savedUser = localStorage.getItem('pitufo_user');
