@@ -156,7 +156,8 @@
           <div class="collab-panel glass-card">
             <div class="collab-tabs">
               <button type="button" class="collab-tab active" data-tab="chat-tab-content">💬 Chat</button>
-              <button type="button" class="collab-tab" data-tab="tasks-tab-content">📋 Tareas</button>
+              <button type="button" class="collab-tab" data-tab="tasks-tab-content">📋 Tareas del Equipo</button>
+              <button type="button" class="collab-tab" data-tab="my-tasks-tab-content">👤 Mis Tareas</button>
             </div>
 
             <!-- Contenido del Chat -->
@@ -179,10 +180,18 @@
 
               <!-- Formulario de Creación de Tareas -->
               <form id="task-form" class="task-form-expanded hidden">
-                <input type="text" id="task-title-input" placeholder="¿Qué hay que hacer?" required autocomplete="off">
-                <select id="task-assignee-select" class="task-select">
-                  <option value="Todos">Asignar a: Todos</option>
-                </select>
+                <input type="text" id="task-title-input" placeholder="Título de la tarea" required autocomplete="off">
+                <textarea id="task-desc-input" placeholder="Descripción de la tarea (detalles o instrucciones...)" autocomplete="off" rows="2" style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--glass-border); border-radius: 8px; padding: 8px 12px; color: var(--text-main); outline: none; font-size: 0.85rem; font-family: var(--font-family); resize: vertical;"></textarea>
+                <div style="display: flex; gap: 10px; width: 100%;">
+                  <select id="task-assignee-select" class="task-select" style="flex: 1;">
+                    <option value="Todos">Sin asignar / Todos</option>
+                  </select>
+                  <select id="task-priority-select" class="task-select" style="flex: 1;">
+                    <option value="Media">Prioridad: Media</option>
+                    <option value="Baja">Prioridad: Baja</option>
+                    <option value="Alta">Prioridad: Alta</option>
+                  </select>
+                </div>
                 <div class="task-form-actions">
                   <button type="submit" class="btn btn-primary btn-sm-task">Crear</button>
                   <button type="button" id="cancel-task-btn" class="btn btn-secondary btn-sm-task">Cancelar</button>
@@ -202,6 +211,16 @@
                 <div id="tasks-history-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 120px; overflow-y: auto; font-size: 0.75rem; padding-right: 5px;">
                   <div style="color: var(--text-muted); font-style: italic; text-align: center; margin-top: 10px;">Ningún logro registrado aún.</div>
                 </div>
+              </div>
+            </div>
+
+            <!-- Contenido de Mis Tareas -->
+            <div class="collab-tab-content hidden" id="my-tasks-tab-content">
+              <div class="tasks-header">
+                <h3>Mis Tareas</h3>
+              </div>
+              <div class="tasks-list" id="my-tasks-list-container">
+                <div class="tasks-empty-state">No tienes tareas asignadas.</div>
               </div>
             </div>
           </div>

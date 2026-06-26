@@ -464,6 +464,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const avatarHtml = getAvatarElement(user.avatar);
       
       memberCard.innerHTML = `
+        <button class="btn-buzz" title="Enviar Zumbido a ${user.name}">🚨</button>
         <div class="member-status-img-wrapper" style="width: 100%; height: 160px; border-radius: 12px; overflow: hidden; position: relative; margin-bottom: 15px; background: rgba(0,0,0,0.3);">
           <img src="${statusImgSrc}" style="width: 100%; height: 100%; object-fit: cover;">
           <div class="member-avatar-badge-corner" style="position: absolute; bottom: 8px; right: 8px; width: 36px; height: 36px; border-radius: 50%; overflow: hidden; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; background: #1e293b;">
@@ -474,6 +475,15 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="member-status-text" style="font-size: 0.9rem; font-weight: 600; color: #60a5fa; margin-top: 5px; background: rgba(96, 165, 250, 0.1); padding: 4px 10px; border-radius: 8px;">${displayStatus}</div>
         <div class="member-time" style="margin-top: 12px; font-size: 0.75rem; color: var(--text-muted);">Actualizado: ${user.updatedTime}</div>
       `;
+      
+      // Evento para enviar zumbido
+      const buzzBtn = memberCard.querySelector('.btn-buzz');
+      if (buzzBtn) {
+        buzzBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          socket.emit('send-buzz', user.id);
+        });
+      }
       
       teamGrid.appendChild(memberCard);
     });
@@ -545,7 +555,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (targetId === 'chat-tab-content') {
         tab.textContent = '💬 Chat';
       } else if (targetId === 'tasks-tab-content') {
-        tab.textContent = '📋 Tareas';
+        tab.textContent = '📋 Tareas del Equipo';
+      } else if (targetId === 'my-tasks-tab-content') {
+        tab.textContent = '👤 Mis Tareas';
       }
       
       // Auto-scroll chat al cambiar a pestaña chat
@@ -602,6 +614,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const taskTitleInput = document.getElementById('task-title-input');
   const taskAssigneeSelect = document.getElementById('task-assignee-select');
   const tasksListContainer = document.getElementById('tasks-list-container');
+  const myTasksListContainer = document.getElementById('my-tasks-list-container');
+  const taskDescInput = document.getElementById('task-desc-input');
+  const taskPrioritySelect = document.getElementById('task-priority-select');
 
   if (showAddTaskBtn && taskForm) {
     showAddTaskBtn.addEventListener('click', () => {
@@ -616,6 +631,8 @@ document.addEventListener('DOMContentLoaded', () => {
     cancelTaskBtn.addEventListener('click', () => {
       taskForm.classList.add('hidden');
       taskTitleInput.value = '';
+      if (taskDescInput) taskDescInput.value = '';
+      if (taskPrioritySelect) taskPrioritySelect.value = 'Media';
     });
   }
 
@@ -624,11 +641,15 @@ document.addEventListener('DOMContentLoaded', () => {
     taskForm.addEventListener('submit', (e) => {
       e.preventDefault();
       const title = taskTitleInput.value.trim();
+      const description = taskDescInput ? taskDescInput.value.trim() : '';
       const assignedTo = taskAssigneeSelect.value;
+      const priority = taskPrioritySelect ? taskPrioritySelect.value : 'Media';
       
       if (title) {
-        socket.emit('create-task', { title, assignedTo });
+        socket.emit('create-task', { title, description, assignedTo, priority });
         taskTitleInput.value = '';
+        if (taskDescInput) taskDescInput.value = '';
+        if (taskPrioritySelect) taskPrioritySelect.value = 'Media';
         taskForm.classList.add('hidden');
       }
     });
@@ -637,51 +658,134 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderTasksList(tasksList) {
     if (!tasksListContainer) return;
     
+    // 1. Render all tasks (Tareas del Equipo)
     if (tasksList.length === 0) {
       tasksListContainer.innerHTML = '<div class="tasks-empty-state">¡Todo al día! No hay tareas pendientes.</div>';
-      return;
-    }
-    
-    tasksListContainer.innerHTML = '';
-    tasksList.forEach(task => {
-      const isCompleted = task.status === 'completed';
-      const taskItem = document.createElement('div');
-      taskItem.className = `task-item ${isCompleted ? 'completed' : ''}`;
-      taskItem.dataset.id = task.id;
-      
-      taskItem.innerHTML = `
-        <div class="task-item-main">
-          <input type="checkbox" class="task-checkbox" ${isCompleted ? 'checked' : ''}>
-          <span class="task-title">${escapeHTML(task.title)}</span>
-        </div>
-        <div class="task-meta">
-          <span class="task-assignee">Para: ${task.assignedTo}</span>
-          <div style="display: flex; gap: 8px; align-items: center;">
-            <span style="font-size: 0.65rem; color: var(--text-muted);">Por: ${task.creator}</span>
+    } else {
+      tasksListContainer.innerHTML = '';
+      tasksList.forEach(task => {
+        const isCompleted = task.status === 'completed';
+        const isUnassigned = task.assignedTo === 'Todos' || !task.assignedTo || task.assignedTo === 'Sin asignar';
+        const showTakeBtn = isUnassigned && !isCompleted;
+        const taskItem = document.createElement('div');
+        taskItem.className = `task-item ${isCompleted ? 'completed' : ''}`;
+        taskItem.dataset.id = task.id;
+        
+        const createdDate = task.createdTimestamp ? new Date(task.createdTimestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : task.createdTime;
+        const completedDate = task.completedTimestamp ? new Date(task.completedTimestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : (task.completedTime ? task.completedTime : '');
+        const priority = task.priority || 'Media';
+
+        taskItem.innerHTML = `
+          <div class="task-item-main">
+            <input type="checkbox" class="task-checkbox" ${isCompleted ? 'checked' : ''}>
+            <span class="task-title">${escapeHTML(task.title)}</span>
+            <span class="priority-badge priority-${priority.toLowerCase()}" style="margin-left: auto;">${priority}</span>
+          </div>
+          ${task.description ? `<div class="task-desc">${escapeHTML(task.description)}</div>` : ''}
+          <div class="task-dates">
+            <div><b>Creada:</b> ${createdDate} (por ${task.creator})</div>
+            ${isCompleted && completedDate ? `<div><b>Finalizada:</b> ${completedDate}</div>` : ''}
+          </div>
+          <div class="task-meta">
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <span class="task-assignee">${isUnassigned ? 'Sin asignar' : 'Para: ' + task.assignedTo}</span>
+              ${showTakeBtn ? `<button class="btn-take-task" data-id="${task.id}">Tomar</button>` : ''}
+            </div>
             <button class="task-delete-btn" title="Eliminar Tarea">&times;</button>
           </div>
-        </div>
-      `;
-      
-      // Evento checkbox status
-      const checkbox = taskItem.querySelector('.task-checkbox');
-      checkbox.addEventListener('change', () => {
-        socket.emit('update-task-status', {
-          id: task.id,
-          status: checkbox.checked ? 'completed' : 'pending'
+        `;
+        
+        // Evento checkbox status
+        const checkbox = taskItem.querySelector('.task-checkbox');
+        checkbox.addEventListener('change', () => {
+          socket.emit('update-task-status', {
+            id: task.id,
+            status: checkbox.checked ? 'completed' : 'pending'
+          });
         });
-      });
-      
-      // Evento eliminar
-      const deleteBtn = taskItem.querySelector('.task-delete-btn');
-      deleteBtn.addEventListener('click', () => {
-        if (confirm('¿Eliminar esta tarea?')) {
-          socket.emit('delete-task', task.id);
+        
+        // Evento tomar tarea
+        if (showTakeBtn) {
+          const takeBtn = taskItem.querySelector('.btn-take-task');
+          takeBtn.addEventListener('click', () => {
+            socket.emit('take-task', task.id);
+          });
         }
+        
+        // Evento eliminar
+        const deleteBtn = taskItem.querySelector('.task-delete-btn');
+        deleteBtn.addEventListener('click', () => {
+          if (confirm('¿Eliminar esta tarea?')) {
+            socket.emit('delete-task', task.id);
+          }
+        });
+        
+        tasksListContainer.appendChild(taskItem);
       });
-      
-      tasksListContainer.appendChild(taskItem);
-    });
+    }
+
+    // 2. Render my tasks (Mis Tareas)
+    if (!myTasksListContainer) return;
+    
+    const myTasks = tasksList.filter(task => currentUser && task.assignedTo && task.assignedTo.toLowerCase() === currentUser.name.toLowerCase());
+    
+    if (myTasks.length === 0) {
+      myTasksListContainer.innerHTML = '<div class="tasks-empty-state">No tienes tareas asignadas.</div>';
+    } else {
+      myTasksListContainer.innerHTML = '';
+      myTasks.forEach(task => {
+        const isCompleted = task.status === 'completed';
+        const taskItem = document.createElement('div');
+        taskItem.className = `task-item ${isCompleted ? 'completed' : ''}`;
+        taskItem.dataset.id = task.id;
+        
+        const createdDate = task.createdTimestamp ? new Date(task.createdTimestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : task.createdTime;
+        const completedDate = task.completedTimestamp ? new Date(task.completedTimestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : (task.completedTime ? task.completedTime : '');
+        const priority = task.priority || 'Media';
+
+        taskItem.innerHTML = `
+          <div class="task-item-main">
+            <input type="checkbox" class="task-checkbox" ${isCompleted ? 'checked' : ''}>
+            <span class="task-title">${escapeHTML(task.title)}</span>
+            <span class="priority-badge priority-${priority.toLowerCase()}" style="margin-left: auto;">${priority}</span>
+          </div>
+          ${task.description ? `<div class="task-desc">${escapeHTML(task.description)}</div>` : ''}
+          <div class="task-dates">
+            <div><b>Creada:</b> ${createdDate} (por ${task.creator})</div>
+            ${isCompleted && completedDate ? `<div><b>Finalizada:</b> ${completedDate}</div>` : ''}
+          </div>
+          <div class="task-meta">
+            <span class="task-assignee">Asignada a ti</span>
+            <button class="task-delete-btn" title="Eliminar Tarea">&times;</button>
+          </div>
+        `;
+        
+        // Evento checkbox status
+        const checkbox = taskItem.querySelector('.task-checkbox');
+        checkbox.addEventListener('change', () => {
+          socket.emit('update-task-status', {
+            id: task.id,
+            status: checkbox.checked ? 'completed' : 'pending'
+          });
+        });
+        
+        // Evento eliminar
+        const deleteBtn = taskItem.querySelector('.task-delete-btn');
+        deleteBtn.addEventListener('click', () => {
+          if (confirm('¿Eliminar esta tarea?')) {
+            socket.emit('delete-task', task.id);
+          }
+        });
+        
+        myTasksListContainer.appendChild(taskItem);
+      });
+    }
+    
+    // Update admin history list with completed tasks from clientTasks
+    if (currentUser && currentUser.role === 'admin') {
+      const completedActiveTasks = tasksList.filter(t => t.status === 'completed');
+      renderCompletedTasksList(completedActiveTasks);
+    }
   }
 
   // Utilidad para sanitizar HTML
@@ -746,13 +850,24 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Notificación si es para nosotros
     if (currentUser && (task.assignedTo.toLowerCase() === currentUser.name.toLowerCase() || task.assignedTo === 'Todos') && task.creator.toLowerCase() !== currentUser.name.toLowerCase()) {
-      showToast(task.creator, '📋', `Te asignó: "${task.title}"`, true);
+      showToast(task.creator, '📋', `Nueva tarea: "${task.title}"`, true);
       
       const activeTab = document.querySelector('.collab-tab.active');
-      if (!activeTab || activeTab.dataset.tab !== 'tasks-tab-content') {
-        const tasksTabButton = document.querySelector('.collab-tab[data-tab="tasks-tab-content"]');
-        if (tasksTabButton && !tasksTabButton.textContent.includes('●')) {
-          tasksTabButton.textContent = '📋 Tareas ●';
+      const isSpecificToMe = task.assignedTo.toLowerCase() === currentUser.name.toLowerCase();
+      
+      if (isSpecificToMe) {
+        if (!activeTab || activeTab.dataset.tab !== 'my-tasks-tab-content') {
+          const myTasksTabButton = document.querySelector('.collab-tab[data-tab="my-tasks-tab-content"]');
+          if (myTasksTabButton && !myTasksTabButton.textContent.includes('●')) {
+            myTasksTabButton.textContent = '👤 Mis Tareas ●';
+          }
+        }
+      } else {
+        if (!activeTab || activeTab.dataset.tab !== 'tasks-tab-content') {
+          const tasksTabButton = document.querySelector('.collab-tab[data-tab="tasks-tab-content"]');
+          if (tasksTabButton && !tasksTabButton.textContent.includes('●')) {
+            tasksTabButton.textContent = '📋 Tareas del Equipo ●';
+          }
         }
       }
     }
@@ -822,18 +937,79 @@ document.addEventListener('DOMContentLoaded', () => {
     clientCompletedTasks = [];
     renderCompletedTasksList(clientCompletedTasks);
   });
-
-  // Socket: Recibir archivado de tarea
-  socket.on('task-archived', (data) => {
-    // Quitar de la lista de tareas activas locales
-    clientTasks = clientTasks.filter(t => t.id !== data.taskId);
-    renderTasksList(clientTasks);
+  // Socket: Recibir zumbido
+  socket.on('receive-buzz', (data) => {
+    playBuzzSound();
     
-    // Agregar al historial de completadas
-    clientCompletedTasks.push(data.archivedTask);
-    if (clientCompletedTasks.length > 50) clientCompletedTasks.shift();
-    renderCompletedTasksList(clientCompletedTasks);
+    // Sacudir la pantalla
+    document.body.classList.add('shake-screen');
+    setTimeout(() => {
+      document.body.classList.remove('shake-screen');
+    }, 450);
+    
+    showBuzzToast(data.senderName);
+    
+    if (Notification.permission === 'granted') {
+      new Notification(`🚨 ¡ZUMBIDO de ${data.senderName}!`, {
+        body: `${data.senderName} te ha enviado un zumbido de atención.`,
+        icon: '/icon.png'
+      });
+    }
   });
+
+  function playBuzzSound() {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc1 = audioCtx.createOscillator();
+      const gain1 = audioCtx.createGain();
+      osc1.type = 'sawtooth';
+      osc1.frequency.setValueAtTime(160, audioCtx.currentTime);
+      gain1.gain.setValueAtTime(0.18, audioCtx.currentTime);
+      gain1.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
+      
+      osc1.connect(gain1);
+      gain1.connect(audioCtx.destination);
+      osc1.start();
+      osc1.stop(audioCtx.currentTime + 0.35);
+      
+      setTimeout(() => {
+        const osc2 = audioCtx.createOscillator();
+        const gain2 = audioCtx.createGain();
+        osc2.type = 'sawtooth';
+        osc2.frequency.setValueAtTime(160, audioCtx.currentTime);
+        gain2.gain.setValueAtTime(0.18, audioCtx.currentTime);
+        gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
+        osc2.connect(gain2);
+        gain2.connect(audioCtx.destination);
+        osc2.start();
+        osc2.stop(audioCtx.currentTime + 0.35);
+      }, 180);
+    } catch (err) {
+      console.error('Error al reproducir audio de zumbido:', err);
+    }
+  }
+
+  function showBuzzToast(name) {
+    if (!toastContainer) return;
+    const toast = document.createElement('div');
+    toast.className = 'toast buzz-toast';
+    toast.innerHTML = `
+      <div style="font-size: 2.2rem;">🚨</div>
+      <div class="toast-content">
+        <h4 style="color: white; font-weight: 800;">¡ZUMBIDO RECIBIDO!</h4>
+        <p style="color: rgba(255,255,255,0.9); font-weight: 600;">${name} solicita tu atención inmediata.</p>
+      </div>
+    `;
+    toastContainer.appendChild(toast);
+    
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(20px)';
+      setTimeout(() => {
+        toast.remove();
+      }, 300);
+    }, 4500);
+  }
 
   // Cargar usuario guardado si existe (Al final de la inicialización)
   const savedUser = localStorage.getItem('pitufo_user');

@@ -53,6 +53,24 @@ try {
   console.error('Error cargando tareas completadas:', err);
 }
 
+function pruneOldMessages() {
+  const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
+  const initialLength = messages.length;
+  messages = messages.filter(msg => {
+    const ts = msg.timestamp || (msg.id ? parseInt(msg.id.split('-')[0]) : Date.now());
+    return ts >= twentyFourHoursAgo;
+  });
+  if (messages.length !== initialLength) {
+    saveMessages();
+  }
+}
+
+// Prune immediately on start
+pruneOldMessages();
+
+// Prune every 5 minutes
+setInterval(pruneOldMessages, 5 * 60 * 1000);
+
 function saveMessages() {
   try {
     fs.writeFileSync(MESSAGES_FILE, JSON.stringify(messages, null, 2), 'utf8');
@@ -95,6 +113,8 @@ io.on('connection', (socket) => {
     io.emit('update-users', Object.values(activeUsers));
     console.log(`Usuario registrado: ${activeUsers[socket.id].name}`);
 
+    // Prune before sending initial messages
+    pruneOldMessages();
     // Enviar mensajes, tareas y tareas completadas existentes al usuario que entra
     socket.emit('init-data', { messages, tasks, completedTasks });
   });
@@ -134,11 +154,11 @@ io.on('connection', (socket) => {
         sender: user.name,
         avatar: user.avatar,
         text: msgText,
+        timestamp: Date.now(),
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       messages.push(newMsg);
-      // Mantener solo los últimos 50 mensajes para no sobrecargar el archivo JSON
-      if (messages.length > 50) messages.shift();
+      pruneOldMessages();
       saveMessages();
       io.emit('new-chat-message', newMsg);
     }
@@ -151,10 +171,14 @@ io.on('connection', (socket) => {
       const newTask = {
         id: Date.now().toString() + '-' + Math.floor(Math.random() * 1000),
         title: taskData.title,
+        description: taskData.description || '',
         assignedTo: taskData.assignedTo || 'Todos',
+        priority: taskData.priority || 'Media',
         creator: user.name,
         status: 'pending', // pending, completed
-        createdTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        createdTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        createdTimestamp: Date.now(),
+        completedTimestamp: null
       };
       tasks.push(newTask);
       saveTasks();
@@ -166,28 +190,15 @@ io.on('connection', (socket) => {
     const task = tasks.find(t => t.id === taskUpdate.id);
     if (task) {
       task.status = taskUpdate.status;
+      if (task.status === 'completed') {
+        task.completedTimestamp = Date.now();
+        task.completedTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } else {
+        task.completedTimestamp = null;
+        task.completedTime = '';
+      }
       saveTasks();
       io.emit('task-updated', task);
-
-      // Si la tarea se marca como completada, se elimina de tareas activas tras 3 segundos y se añade a completadas
-      if (task.status === 'completed') {
-        setTimeout(() => {
-          const currentTask = tasks.find(t => t.id === taskUpdate.id);
-          if (currentTask && currentTask.status === 'completed') {
-            tasks = tasks.filter(t => t.id !== taskUpdate.id);
-            saveTasks();
-            
-            // Añadir a tareas completadas
-            currentTask.completedTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            completedTasks.push(currentTask);
-            // Limitar el historial a las últimas 50 tareas
-            if (completedTasks.length > 50) completedTasks.shift();
-            saveCompletedTasks();
-
-            io.emit('task-archived', { taskId: taskUpdate.id, archivedTask: currentTask });
-          }
-        }, 3000);
-      }
     }
   });
 
@@ -195,6 +206,26 @@ io.on('connection', (socket) => {
     tasks = tasks.filter(t => t.id !== taskId);
     saveTasks();
     io.emit('task-deleted', taskId);
+  });
+
+  socket.on('take-task', (taskId) => {
+    const user = activeUsers[socket.id];
+    if (user) {
+      const task = tasks.find(t => t.id === taskId);
+      if (task && (task.assignedTo === 'Todos' || !task.assignedTo || task.assignedTo === 'Sin asignar')) {
+        task.assignedTo = user.name;
+        saveTasks();
+        io.emit('task-updated', task);
+      }
+    }
+  });
+
+  socket.on('send-buzz', (targetSocketId) => {
+    const sender = activeUsers[socket.id];
+    if (sender && targetSocketId) {
+      io.to(targetSocketId).emit('receive-buzz', { senderName: sender.name });
+      console.log(`Zumbido enviado de ${sender.name} a socket ${targetSocketId}`);
+    }
   });
 
   socket.on('clear-task-history', () => {
