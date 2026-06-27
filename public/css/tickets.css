@@ -1,0 +1,54 @@
+/* tickets.css - Estilos para la pestaña y módulo de tickets de soporte */
+
+.view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-tab {
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid var(--glass-border);
+  color: var(--text-muted);
+  border-radius: 12px;
+  padding: 8px 16px;
+  font-family: var(--font-family);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: var(--transition-smooth);
+}
+
+.nav-tab:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+  transform: translateY(-1px);
+}
+
+.nav-tab.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-hover);
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
+}
+
+.badge-tickets-count {
+  background: #ef4444;
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+
+/* Transición suave entre pestañas */
+.tab-view-content {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.tab-view-content.hidden {
+  display: none !important;
+}

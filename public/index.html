@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="css/login.css">
   <link rel="stylesheet" href="css/widget.css">
   <link rel="stylesheet" href="css/dashboard.css">
+  <link rel="stylesheet" href="css/tickets.css">
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" type="image/png" href="/icon.png">
@@ -213,12 +214,20 @@
         </div>
       </aside>
 
-      <!-- Panel del Equipo (Dashboard principal) -->
+      <!-- Panel del Equipo / Tickets (Dashboard principal) -->
       <main class="dashboard-content">
         <header class="dashboard-header glass-card">
           <div class="header-titles">
-            <h1>Panel del Equipo</h1>
-            <p>Así están tus compañeros de trabajo en tiempo real</p>
+            <div class="view-tabs" id="view-tabs">
+              <button class="nav-tab active" id="tab-moods-btn" data-target="view-moods">
+                <span>😊</span> Estados del Equipo
+              </button>
+              <button class="nav-tab" id="tab-tickets-btn" data-target="view-tickets">
+                <span>🎟️</span> Tickets de Soporte
+                <span class="badge-tickets-count hidden" id="badge-tickets-count">0</span>
+              </button>
+            </div>
+            <p id="dashboard-subtitle" style="margin-top: 6px; margin-bottom: 0;">Así están tus compañeros de trabajo en tiempo real</p>
           </div>
           <div class="system-stats">
             <span class="stat-badge"><span id="user-count">0</span> conectados</span>
@@ -226,10 +235,73 @@
         </header>
 
         <div class="dashboard-body">
-          <div class="team-grid" id="team-grid">
-            <!-- Tarjetas de miembros del equipo se renderizarán aquí de forma dinámica -->
-            <div class="empty-state">
-              <p>Esperando a que se conecten tus compañeros...</p>
+          <!-- Vista 1: Estados del Equipo -->
+          <div id="view-moods" class="tab-view-content">
+            <div class="team-grid" id="team-grid">
+              <!-- Tarjetas de miembros del equipo se renderizarán aquí de forma dinámica -->
+            </div>
+          </div>
+
+          <!-- Vista 2: Tickets de Soporte (Módulo de Incidencias) -->
+          <div id="view-tickets" class="tab-view-content hidden">
+            <div class="tickets-layout" style="display: grid; grid-template-columns: 320px 1fr; gap: 20px;">
+              
+              <!-- Formulario para Crear Ticket -->
+              <div class="create-ticket-card glass-card" style="padding: 20px;">
+                <h3 style="font-size: 1.1rem; margin-bottom: 15px; color: var(--text-main);">➕ Nuevo Ticket de Soporte</h3>
+                <form id="create-ticket-form">
+                  <div class="input-group" style="margin-bottom: 12px;">
+                    <label for="ticket-area" style="font-size: 0.75rem;">Área Solicitante</label>
+                    <select id="ticket-area" required style="width: 100%; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--glass-border); border-radius: 10px; padding: 10px; color: var(--text-main); font-family: var(--font-family); outline: none;">
+                      <option value="Monitoreo">Monitoreo</option>
+                      <option value="Operaciones">Operaciones</option>
+                      <option value="Sistemas / TI">Sistemas / TI</option>
+                      <option value="Administración">Administración</option>
+                      <option value="Logística">Logística</option>
+                    </select>
+                  </div>
+
+                  <div class="input-group" style="margin-bottom: 12px;">
+                    <label for="ticket-priority" style="font-size: 0.75rem;">Prioridad</label>
+                    <select id="ticket-priority" required style="width: 100%; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--glass-border); border-radius: 10px; padding: 10px; color: var(--text-main); font-family: var(--font-family); outline: none;">
+                      <option value="baja">🟢 Baja (Consulta)</option>
+                      <option value="media" selected>🟡 Media (Normal)</option>
+                      <option value="alta">🟠 Alta (Inconveniente)</option>
+                      <option value="urgente">🔴 Urgente (Bloqueante / Alerta)</option>
+                    </select>
+                  </div>
+
+                  <div class="input-group" style="margin-bottom: 12px;">
+                    <label for="ticket-subject" style="font-size: 0.75rem;">Asunto / Incidencia</label>
+                    <input type="text" id="ticket-subject" placeholder="Ej. Impresora no responde" required style="font-size: 0.9rem; padding: 10px 12px;">
+                  </div>
+
+                  <div class="input-group" style="margin-bottom: 15px;">
+                    <label for="ticket-desc" style="font-size: 0.75rem;">Detalle de la Ayuda Requerida</label>
+                    <textarea id="ticket-desc" rows="3" placeholder="Describe brevemente lo que sucedió..." style="width: 100%; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--glass-border); border-radius: 10px; padding: 10px; color: var(--text-main); font-family: var(--font-family); font-size: 0.85rem; outline: none; resize: none;"></textarea>
+                  </div>
+
+                  <button type="submit" class="btn btn-primary" style="font-size: 0.85rem; padding: 10px;">🚨 Emitir Ticket de Ayuda</button>
+                </form>
+              </div>
+
+              <!-- Lista de Tickets Activos -->
+              <div class="tickets-list-container glass-card" style="padding: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                  <h3 style="font-size: 1.1rem; color: var(--text-main);">📋 Tickets Registrados en Red</h3>
+                  <div class="ticket-filters" style="display: flex; gap: 8px;">
+                    <button type="button" class="btn btn-secondary filter-ticket-btn active" data-filter="all" style="padding: 4px 10px; font-size: 0.75rem;">Todos</button>
+                    <button type="button" class="btn btn-secondary filter-ticket-btn" data-filter="pending" style="padding: 4px 10px; font-size: 0.75rem;">Pendientes</button>
+                  </div>
+                </div>
+                
+                <div id="tickets-grid" style="display: flex; flex-direction: column; gap: 12px; max-height: 500px; overflow-y: auto; padding-right: 5px;">
+                  <div class="empty-state" style="padding: 30px; font-size: 0.9rem;">
+                    🎟️ No hay tickets de soporte activos en este momento.
+                  </div>
+                </div>
+              </div>
+
             </div>
           </div>
 
@@ -335,6 +407,7 @@
   <script src="js/mood-manager.js"></script>
   <script src="js/auth-login.js"></script>
   <script src="js/pomodoro.js"></script>
+  <script src="js/navigation.js"></script>
   <!-- Lógica JavaScript Principal -->
   <script src="app.js"></script>
 </body>
