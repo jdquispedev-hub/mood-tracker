@@ -50,6 +50,18 @@ body {
   padding: 20px;
 }
 
+body.electron {
+  padding: 0 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+body.electron:not(.widget-mode):not(.mini-mode) {
+  padding: 20px !important;
+  background: linear-gradient(135deg, var(--bg-gradient-start), var(--bg-gradient-end)) !important;
+  background-color: var(--bg-gradient-end) !important;
+}
+
 /* Glassmorphism General */
 .glass-card {
   background: var(--glass-bg);
@@ -685,12 +697,14 @@ input[type="text"]:focus {
 
 /* Evitamos que las cabeceras se extiendan hasta la esquina superior derecha
    para que no solapen físicamente con los botones de control de ventana */
-.user-profile-header {
-  margin-right: 75px;
+.electron:not(.widget-mode):not(.mini-mode) .dashboard-header {
+  margin-right: 0;
+  padding-right: 100px; /* Dejar espacio para los controles de ventana */
 }
 
-.dashboard-header {
-  margin-right: 75px;
+.electron.widget-mode .user-profile-header {
+  margin-right: 0;
+  padding-right: 70px; /* Dejar espacio para los controles de ventana */
 }
 
 .widget-mode .sidebar-actions,
@@ -719,11 +733,19 @@ input[type="text"]:focus {
 .electron .window-controls {
   display: flex;
   position: fixed;
-  top: 15px;
-  right: 15px;
   gap: 8px;
   z-index: 99999 !important;
   -webkit-app-region: no-drag;
+}
+
+.electron:not(.widget-mode):not(.mini-mode) .window-controls {
+  top: 35px;
+  right: 35px;
+}
+
+.electron.widget-mode .window-controls {
+  top: 22px;
+  right: 22px;
 }
 
 /* Permitir arrastrar la pantalla de login por el logo */
@@ -843,89 +865,161 @@ input[type="text"]:focus {
   font-size: 0.9rem;
 }
 
-/* --- MODO MINI (Super Compacto) --- */
-.mini-mode,
-.mini-mode html,
-.mini-mode body {
+/* Forzar transparencia absoluta en la ventana en modos compactos de Electron */
+html {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+body.electron.widget-mode,
+body.electron.mini-mode {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* ─── MODO MINI (Super Compacto) ─────────────────────────────── */
+body.mini-mode {
   padding: 0 !important;
   margin: 0 !important;
   background: transparent !important;
-  min-height: auto !important;
-  height: 100vh !important;
-  width: 100vw !important;
   overflow: hidden !important;
-  -webkit-app-region: drag !important;
 }
 
-.mini-mode .app-container {
-  width: 100% !important;
-  height: 100% !important;
-  max-width: none !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  display: flex !important;
-  justify-content: center !important;
-  align-items: center !important;
-}
-
+.mini-mode .app-container,
 .mini-mode .main-layout {
-  width: 100% !important;
-  height: 100% !important;
-  margin: 0 !important;
+  display: block !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
   padding: 0 !important;
-  display: flex !important;
-  justify-content: center !important;
-  align-items: center !important;
-  gap: 0 !important;
+  margin: 0 !important;
 }
 
 .mini-mode .sidebar {
-  width: 100% !important;
-  height: 100% !important;
-  max-height: none !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
   position: static !important;
+  top: auto !important;
   margin: 0 !important;
-  padding: 20px 12px 10px 12px !important;
-  border-radius: 20px !important;
+  padding: 0 !important;
+  border-radius: 16px !important;
   display: flex !important;
   flex-direction: column !important;
-  justify-content: center !important;
-  align-items: center !important;
+  justify-content: flex-start !important;
+  align-items: stretch !important;
   overflow: hidden !important;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.7) !important;
-  -webkit-app-region: drag !important;
+  /* Fondo transparente y blur exclusivo del mini-widget */
+  background: rgba(15, 23, 42, 0.62) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.45) !important;
+  cursor: grab !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
-.mini-mode .window-controls,
-.mini-mode .window-controls * {
-  -webkit-app-region: no-drag !important; /* Botones interactivos de la miniatura no son arrastrables */
-}
-
-/* Ocultar contenido en modo mini */
+/* Ocultar en mini */
 .mini-mode .widget-expanded-content,
 .mini-mode .sidebar-actions,
-.mini-mode .dashboard-content {
+.mini-mode .dashboard-content,
+.mini-mode #global-window-controls {
   display: none !important;
 }
 
-/* Mostrar contenido mini */
+/* Mostrar widget mini */
 .mini-mode .widget-mini-content {
   display: flex !important;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  width: 100%;
-  height: 100%;
-  cursor: pointer;
-  justify-content: center;
-  animation: fadeIn 0.3s ease-out;
+  flex-direction: column !important;
+  align-items: center !important;
+  width: 100% !important;
+  height: 100% !important;
+  position: static !important;
 }
 
-.mini-avatar-badge {
-  font-size: 3.2rem;
-  margin-bottom: 5px;
+/* ─── Barra de controles del mini ─── */
+.mini-ctrls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 5px 7px 2px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.mini-win-btns {
+  display: flex;
+  gap: 5px;
+}
+
+.mini-expand-btn {
+  background: transparent !important;
+  border: none !important;
+  color: rgba(148, 163, 184, 0.8);
+  cursor: pointer !important;
+  font-size: 0.85rem;
+  padding: 2px 4px;
+  pointer-events: auto !important;
+  -webkit-app-region: no-drag !important;
   line-height: 1;
-  user-select: none;
+}
+
+.mini-expand-btn:hover {
+  color: #f8fafc;
+}
+
+#mini-minimize-btn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #f8fafc;
+  cursor: pointer !important;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  pointer-events: auto !important;
+  -webkit-app-region: no-drag !important;
+  transition: background 0.15s;
+}
+
+#mini-minimize-btn:hover {
+  background: rgba(255,255,255,0.25);
+}
+
+#mini-close-btn {
+  background: rgba(239,68,68,0.15);
+  border: 1px solid rgba(239,68,68,0.3);
+  color: #ef4444;
+  cursor: pointer !important;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  pointer-events: auto !important;
+  -webkit-app-region: no-drag !important;
+  transition: background 0.15s;
+}
+
+#mini-close-btn:hover {
+  background: #ef4444;
+  color: white;
+}
+
+/* ─── Cuerpo centrado del mini ─── */
+.mini-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  width: 100%;
+  padding: 0 6px 6px;
+  box-sizing: border-box;
 }
 
 .mini-status-name {
@@ -934,43 +1028,25 @@ input[type="text"]:focus {
   color: var(--text-main);
   text-transform: capitalize;
   margin-bottom: 2px;
-  max-width: 110px;
+  max-width: 130px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  pointer-events: none !important;
+  pointer-events: none;
 }
 
 .mini-status-text {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: var(--text-muted);
-  max-width: 110px;
+  max-width: 130px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-weight: 500;
-  pointer-events: none !important;
+  pointer-events: none;
 }
 
-/* Controles reducidos para modo mini */
-.mini-mode .window-controls {
-  top: 12px;
-  right: 12px;
-  gap: 6px;
-  z-index: 99999;
-}
-
-.mini-mode .win-control-btn {
-  width: 22px;
-  height: 22px;
-  font-size: 0.75rem;
-}
-
-.mini-mode .mini-expand-btn {
-  -webkit-app-region: no-drag !important;
-}
-
-/* Barra invisible para arrastrar la ventana desde el borde superior */
+/* ─── Barra drag invisible en Electron normal ─── */
 .drag-handle-bar {
   display: none;
 }
@@ -981,9 +1057,9 @@ input[type="text"]:focus {
   top: 0;
   left: 0;
   width: 100%;
-  height: 45px; /* Cubre los primeros 45px superiores */
+  height: 45px;
   -webkit-app-region: drag !important;
-  z-index: 99990 !important; /* Por debajo de los botones de control de ventana (99999) */
+  z-index: 99990 !important;
 }
 
 .mini-mode .drag-handle-bar {
@@ -1451,6 +1527,11 @@ input[type="text"]:focus {
 }
 
 /* Corregir bug de duplicación de texto (ghosting/trails) en ventanas transparentes de Electron en macOS */
+body.electron.widget-mode,
+body.electron.mini-mode {
+  background: transparent !important;
+}
+
 .electron .glass-card,
 .electron .toast,
 .electron .collab-panel {

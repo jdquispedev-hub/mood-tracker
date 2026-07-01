@@ -40,7 +40,22 @@ ipcMain.on('window-minimize', (event) => {
 ipcMain.on('window-resize', (event, { width, height }) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (win) {
+    console.log(`[IPC] Redimensionando ventana a: ${width}x${height}`);
     win.setSize(width, height);
+    win.setBounds({ width, height });
+    
+    // Forzar a macOS a recalcular la sombra de la ventana transparente
+    if (process.platform === 'darwin') {
+      win.invalidateShadow();
+    }
+  }
+});
+
+ipcMain.on('window-move', (event, { deltaX, deltaY }) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win) {
+    const [x, y] = win.getPosition();
+    win.setPosition(x + deltaX, y + deltaY);
   }
 });
 
@@ -48,6 +63,8 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 340,
     height: 600,
+    minWidth: 50,             // Permitir encoger el ancho para el widget mini
+    minHeight: 50,            // Permitir encoger el alto para el widget mini
     frame: false,             // Sin bordes de ventana de OS
     transparent: true,        // Permitir transparencia en CSS
     alwaysOnTop: true,        // Flota por encima de otras apps

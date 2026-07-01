@@ -17,11 +17,6 @@
   <!-- Barra invisible superior para arrastrar la ventana en cualquier modo -->
   <div class="drag-handle-bar"></div>
 
-  <!-- Controles de Ventana Globales para Electron Widget -->
-  <div class="window-controls" id="global-window-controls">
-    <button class="win-control-btn win-minimize-btn" id="win-minimize-btn" title="Minimizar Widget">&minus;</button>
-    <button class="win-control-btn win-close-btn" id="win-close-btn" title="Cerrar Widget">&times;</button>
-  </div>
 
   <div class="app-container">
     
@@ -89,14 +84,73 @@
           </div>
 
           <!-- Temporizador de Enfoque Pomodoro -->
-          <div class="focus-timer-card">
-            <div class="focus-timer-header">
-              <span class="focus-tomato">🍅</span>
-              <span class="focus-timer-title">Modo Enfoque</span>
+          <div class="focus-timer-card" id="focus-timer-card">
+            <div class="focus-timer-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="focus-tomato" id="focus-icon">🍅</span>
+                <span class="focus-timer-title" id="focus-timer-title">Modo Enfoque</span>
+              </div>
+              <button type="button" id="btn-focus-settings" style="background: transparent; border: none; color: #c084fc; cursor: pointer; font-size: 1.15rem; display: flex; align-items: center; justify-content: center; transition: var(--transition-smooth); outline: none;">⚙️</button>
             </div>
+
+            <!-- Panel de Configuración de Tiempos Pomodoro -->
+            <div id="focus-settings-panel" class="hidden" style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 5px;">
+              <div style="display: flex; gap: 10px; justify-content: space-between;">
+                <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                  <label style="font-size: 0.7rem; color: #c084fc; margin-bottom: 0; font-weight: 700; letter-spacing: 0.5px;">ENFOQUE (MIN)</label>
+                  <input type="number" id="focus-work-time-input" min="1" max="180" value="25" style="width: 100%; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 6px 8px; color: white; font-size: 0.85rem; outline: none; font-family: var(--font-family);">
+                </div>
+                <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                  <label style="font-size: 0.7rem; color: #c084fc; margin-bottom: 0; font-weight: 700; letter-spacing: 0.5px;">DESCANSO (MIN)</label>
+                  <input type="number" id="focus-break-time-input" min="1" max="60" value="5" style="width: 100%; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 6px 8px; color: white; font-size: 0.85rem; outline: none; font-family: var(--font-family);">
+                </div>
+              </div>
+              <button type="button" id="btn-save-focus-settings" style="width: 100%; background: #8b5cf6; border: none; border-radius: 8px; padding: 8px; color: white; font-size: 0.8rem; font-weight: 600; cursor: pointer; font-family: var(--font-family); transition: var(--transition-smooth);">Guardar</button>
+            </div>
+
             <div class="focus-timer-body">
               <div class="timer-display" id="focus-timer-display">25:00</div>
-              <button type="button" class="btn-focus" id="btn-toggle-focus">Iniciar Enfoque</button>
+              <div style="display: flex; gap: 8px; flex: 1; justify-content: flex-end;">
+                <button type="button" class="btn-focus" id="btn-toggle-focus" style="flex: 1; padding: 8px 12px; font-size: 0.8rem;">Iniciar Enfoque</button>
+                <button type="button" class="btn-focus btn-focus-secondary hidden" id="btn-stop-focus" style="padding: 8px 10px; font-size: 0.8rem; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; box-shadow: none;">Detener</button>
+              </div>
+            </div>
+
+            <!-- Reproductor de Sonidos Ambientales para Concentración -->
+            <div id="ambient-player-container" style="margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="display: flex; align-items: center; justify-content: space-between;">
+                <span style="font-size: 0.75rem; color: #c084fc; font-weight: 700; letter-spacing: 0.5px;">🎧 AUDIO DE CONCENTRACIÓN</span>
+                <button type="button" id="btn-ambient-play" style="background: transparent; border: none; color: #c084fc; cursor: pointer; font-size: 0.95rem; outline: none; padding: 0 4px; font-weight: 700;">▶️ Iniciar</button>
+              </div>
+
+              <!-- Selector de Sonido -->
+              <select id="ambient-sound-select" style="width: 100%; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(139, 92, 246, 0.2); border-radius: 8px; padding: 6px 10px; color: var(--text-main); font-family: var(--font-family); font-size: 0.8rem; outline: none; cursor: pointer;">
+                <option value="none">🔇 Ninguno</option>
+                <option value="rain">🌧️ Lluvia Relajante</option>
+                <option value="waves">🌊 Olas del Mar</option>
+                <option value="lofi">🎹 Música Lofi (Radio 24/7)</option>
+                <option value="local">📁 Cargar archivo local (MP3/WAV)...</option>
+                <option value="url">🔗 Pegar enlace de audio...</option>
+              </select>
+
+              <!-- Inputs dinámicos -->
+              <div id="ambient-local-wrapper" class="hidden" style="margin-top: 4px;">
+                <input type="file" id="ambient-local-file" accept="audio/*" style="display: none;">
+                <button type="button" id="btn-trigger-ambient-file" style="width: 100%; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 6px; color: white; font-size: 0.75rem; cursor: pointer; font-family: var(--font-family); font-weight: 600;">📁 Elegir archivo de música</button>
+                <span id="ambient-file-name" style="display: block; font-size: 0.7rem; color: #c084fc; margin-top: 4px; text-align: center; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;"></span>
+              </div>
+
+              <div id="ambient-url-wrapper" class="hidden" style="display: flex; gap: 6px; margin-top: 4px;">
+                <input type="text" id="ambient-url-input" placeholder="Pegar URL .mp3 o Stream" style="flex: 1; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 5px 8px; color: white; font-size: 0.75rem; outline: none; font-family: var(--font-family);">
+                <button type="button" id="btn-apply-ambient-url" style="background: #8b5cf6; border: none; border-radius: 6px; padding: 5px 10px; color: white; font-size: 0.75rem; font-weight: 600; cursor: pointer; font-family: var(--font-family);">Ok</button>
+              </div>
+
+              <!-- Control de Volumen -->
+              <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                <span style="font-size: 0.8rem; color: #c084fc;">🔈</span>
+                <input type="range" id="ambient-volume-slider" min="0" max="100" value="40" style="flex: 1; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; outline: none; cursor: pointer; accent-color: #8b5cf6;">
+                <span style="font-size: 0.8rem; color: #c084fc;">🔊</span>
+              </div>
             </div>
           </div>
 
@@ -129,12 +183,22 @@
 
         <!-- Vista Mini / Colapsada (Super compacta para escritorio) -->
         <div class="widget-mini-content hidden" id="widget-mini-content" title="Doble clic para expandir">
-          <button class="mini-expand-btn" id="mini-expand-btn" title="Expandir Widget" style="position: absolute; top: 12px; left: 12px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.8rem; -webkit-app-region: no-drag; z-index: 10;">⤢</button>
-          <div class="mini-status-image-container" id="mini-status-image-container" style="width: 70px; height: 70px; border-radius: 12px; overflow: hidden; margin-bottom: 5px; border: 2px solid rgba(255,255,255,0.2); display: flex; justify-content: center; align-items: center; background: rgba(0,0,0,0.3); pointer-events: none;">
-            <img id="mini-status-image" src="" style="width: 100%; height: 100%; object-fit: cover;">
+          <!-- Barra superior: expand izq, minimize+cerrar der -->
+          <div class="mini-ctrls">
+            <button class="mini-expand-btn" id="mini-expand-btn" title="Expandir">⤢</button>
+            <div class="mini-win-btns">
+              <button id="mini-minimize-btn" title="Minimizar">&minus;</button>
+              <button id="mini-close-btn" title="Cerrar">&times;</button>
+            </div>
           </div>
-          <div class="mini-status-name" id="mini-status-name">jesus</div>
-          <div class="mini-status-text" id="mini-status-text">Disponible</div>
+          <!-- Contenido centrado -->
+          <div class="mini-body">
+            <div class="mini-status-image-container" id="mini-status-image-container" style="width: 70px; height: 70px; border-radius: 10px; overflow: hidden; margin-bottom: 5px; border: 2px solid rgba(255,255,255,0.2); display: flex; justify-content: center; align-items: center; background: rgba(0,0,0,0.3);">
+              <img id="mini-status-image" src="" style="width: 100%; height: 100%; object-fit: cover;">
+            </div>
+            <div class="mini-status-name" id="mini-status-name">jesus</div>
+            <div class="mini-status-text" id="mini-status-text">Disponible</div>
+          </div>
         </div>
 
         <div class="sidebar-actions">
@@ -245,6 +309,12 @@
 
   <!-- Contenedor para notificaciones flotantes en la app -->
   <div class="notification-container" id="toast-container"></div>
+
+  <!-- Controles de Ventana Globales para Electron Widget -->
+  <div class="window-controls" id="global-window-controls">
+    <button class="win-control-btn win-minimize-btn" id="win-minimize-btn" title="Minimizar Widget">&minus;</button>
+    <button class="win-control-btn win-close-btn" id="win-close-btn" title="Cerrar Widget">&times;</button>
+  </div>
 
   <!-- Socket.io Cliente -->
   <script src="/socket.io/socket.io.js"></script>

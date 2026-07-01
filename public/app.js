@@ -323,13 +323,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Escuchar entrada de estado personalizado (texto)
   if (customStatusInput) {
+    let statusTimeout;
     customStatusInput.addEventListener('input', () => {
       const text = customStatusInput.value.trim();
       if (currentUser) {
         currentUser.customStatus = text;
         localStorage.setItem('pitufo_user', JSON.stringify(currentUser));
-        socket.emit('update-mood', { customStatus: text });
         updateMiniView();
+        
+        // Debounce de 1.2 segundos para no inundar de notificaciones por cada tecla
+        clearTimeout(statusTimeout);
+        statusTimeout = setTimeout(() => {
+          socket.emit('update-mood', { customStatus: text });
+        }, 1200);
+      }
+    });
+
+    customStatusInput.addEventListener('blur', () => {
+      // Al salir del input, forzar actualización inmediata
+      const text = customStatusInput.value.trim();
+      if (currentUser) {
+        clearTimeout(statusTimeout);
+        socket.emit('update-mood', { customStatus: text });
+      }
+    });
+
+    customStatusInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        customStatusInput.blur();
       }
     });
   }
@@ -386,18 +407,85 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (isMini) {
       toggleMiniBtn.textContent = 'Expandir Widget';
-      if (window.electronAPI) window.electronAPI.resize(130, 150);
+      if (window.electronAPI) {
+        setTimeout(() => {
+          window.electronAPI.resize(130, 152);
+        }, 40);
+      }
+      enableMiniDrag();
     } else {
       toggleMiniBtn.textContent = 'Colapsar a Mini';
+      disableMiniDrag();
       if (window.electronAPI) {
         const isWidget = document.body.classList.contains('widget-mode');
-        if (isWidget) {
-          window.electronAPI.resize(340, 600);
-        } else {
-          window.electronAPI.resize(1024, 768);
-        }
+        setTimeout(() => {
+          if (isWidget) {
+            window.electronAPI.resize(340, 600);
+          } else {
+            window.electronAPI.resize(1024, 768);
+          }
+        }, 40);
       }
     }
+  }
+
+  // Botones mini dedicados dentro de la tarjeta
+  const miniMinimizeBtn = document.getElementById('mini-minimize-btn');
+  const miniCloseBtn = document.getElementById('mini-close-btn');
+  if (miniMinimizeBtn) {
+    miniMinimizeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (window.electronAPI) window.electronAPI.minimize();
+    });
+  }
+  if (miniCloseBtn) {
+    miniCloseBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (window.electronAPI) window.electronAPI.close();
+    });
+  }
+
+  // Drag manual en modo mini via IPC para que los botones no sean bloqueados por CSS drag
+  let miniDragActive = false;
+  let miniDragStartX = 0;
+  let miniDragStartY = 0;
+
+  function onMiniMouseDown(e) {
+    // Ignorar si el clic fue en un botón o control interactivo
+    if (e.target.closest('button, a, input')) return;
+    miniDragActive = true;
+    miniDragStartX = e.screenX;
+    miniDragStartY = e.screenY;
+    document.addEventListener('mousemove', onMiniMouseMove);
+    document.addEventListener('mouseup', onMiniMouseUp);
+  }
+
+  function onMiniMouseMove(e) {
+    if (!miniDragActive) return;
+    const deltaX = e.screenX - miniDragStartX;
+    const deltaY = e.screenY - miniDragStartY;
+    miniDragStartX = e.screenX;
+    miniDragStartY = e.screenY;
+    if (window.electronAPI && window.electronAPI.move) {
+      window.electronAPI.move(deltaX, deltaY);
+    }
+  }
+
+  function onMiniMouseUp() {
+    miniDragActive = false;
+    document.removeEventListener('mousemove', onMiniMouseMove);
+    document.removeEventListener('mouseup', onMiniMouseUp);
+  }
+
+  function enableMiniDrag() {
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar) sidebar.addEventListener('mousedown', onMiniMouseDown);
+  }
+
+  function disableMiniDrag() {
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar) sidebar.removeEventListener('mousedown', onMiniMouseDown);
+    miniDragActive = false;
   }
 
   // Alternar el Modo Widget Compacto
@@ -1025,69 +1113,266 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // LÓGICA DEL POMODORO / MODO ENFOQUE
   let focusTimerInterval = null;
+  let timerState = 'idle'; // 'idle', 'running', 'paused'
+  let timerType = 'work'; // 'work', 'break'
+  
+  // Cargar configuraciones guardadas
+  let workDurationMin = parseInt(localStorage.getItem('pitufo_focus_work_time')) || 25;
+  let breakDurationMin = parseInt(localStorage.getItem('pitufo_focus_break_time')) || 5;
+  let timeLeftMs = workDurationMin * 60 * 1000;
+
   const btnToggleFocus = document.getElementById('btn-toggle-focus');
+  const btnStopFocus = document.getElementById('btn-stop-focus');
+  const btnFocusSettings = document.getElementById('btn-focus-settings');
+  const focusSettingsPanel = document.getElementById('focus-settings-panel');
+  const focusWorkTimeInput = document.getElementById('focus-work-time-input');
+  const focusBreakTimeInput = document.getElementById('focus-break-time-input');
+  const btnSaveFocusSettings = document.getElementById('btn-save-focus-settings');
   const focusTimerDisplay = document.getElementById('focus-timer-display');
+  const focusTimerTitle = document.getElementById('focus-timer-title');
+  const focusIcon = document.getElementById('focus-icon');
+  const focusTimerCard = document.getElementById('focus-timer-card');
+
+  // Inicializar inputs de configuración con los valores cargados
+  if (focusWorkTimeInput) focusWorkTimeInput.value = workDurationMin;
+  if (focusBreakTimeInput) focusBreakTimeInput.value = breakDurationMin;
+  
+  // Establecer texto del temporizador inicialmente
+  updateTimerDisplay(timeLeftMs);
+
+  // Toggle Panel de Configuración
+  if (btnFocusSettings) {
+    btnFocusSettings.addEventListener('click', () => {
+      focusSettingsPanel.classList.toggle('hidden');
+    });
+  }
+
+  // Guardar configuración
+  if (btnSaveFocusSettings) {
+    btnSaveFocusSettings.addEventListener('click', () => {
+      const workMin = parseInt(focusWorkTimeInput.value) || 25;
+      const breakMin = parseInt(focusBreakTimeInput.value) || 5;
+      
+      workDurationMin = Math.max(1, Math.min(180, workMin));
+      breakDurationMin = Math.max(1, Math.min(60, breakMin));
+      
+      localStorage.setItem('pitufo_focus_work_time', workDurationMin);
+      localStorage.setItem('pitufo_focus_break_time', breakDurationMin);
+      
+      focusSettingsPanel.classList.add('hidden');
+      
+      // Si el timer está libre/idle, actualizamos la pantalla con el nuevo tiempo de Enfoque
+      if (timerState === 'idle') {
+        timerType = 'work';
+        timeLeftMs = workDurationMin * 60 * 1000;
+        updateTimerDisplay(timeLeftMs);
+        resetFocusCardTheme();
+      }
+      showToast('Configuración Guardada', '⚙️', 'Tiempos de enfoque y descanso actualizados.');
+    });
+  }
 
   if (btnToggleFocus) {
     btnToggleFocus.addEventListener('click', () => {
-      if (focusTimerInterval) {
-        stopFocusSession();
+      if (timerState === 'running') {
+        pauseFocusSession();
       } else {
-        startFocusSession(25 * 60 * 1000); // 25 Minutos por defecto
+        startFocusSession();
       }
     });
   }
 
-  function startFocusSession(durationMs) {
+  if (btnStopFocus) {
+    btnStopFocus.addEventListener('click', () => {
+      stopAndResetFocusSession();
+    });
+  }
+
+  function resetFocusCardTheme() {
+    if (!focusTimerCard) return;
+    if (timerType === 'work') {
+      focusTimerCard.style.background = 'rgba(139, 92, 246, 0.08)';
+      focusTimerCard.style.borderColor = 'rgba(139, 92, 246, 0.25)';
+      if (focusTimerTitle) {
+        focusTimerTitle.textContent = 'Modo Enfoque';
+        focusTimerTitle.style.color = '#c084fc';
+      }
+      if (focusIcon) focusIcon.textContent = '🍅';
+      if (btnToggleFocus) {
+        btnToggleFocus.style.background = '#8b5cf6';
+        btnToggleFocus.style.boxShadow = '0 4px 12px rgba(139, 92, 246, 0.3)';
+        btnToggleFocus.textContent = timerState === 'running' ? 'Pausar' : (timerState === 'paused' ? 'Reanudar' : 'Iniciar Enfoque');
+      }
+    } else {
+      focusTimerCard.style.background = 'rgba(16, 185, 129, 0.08)';
+      focusTimerCard.style.borderColor = 'rgba(16, 185, 129, 0.25)';
+      if (focusTimerTitle) {
+        focusTimerTitle.textContent = 'Modo Descanso';
+        focusTimerTitle.style.color = '#34d399';
+      }
+      if (focusIcon) focusIcon.textContent = '☕';
+      if (btnToggleFocus) {
+        btnToggleFocus.style.background = '#10b981';
+        btnToggleFocus.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.3)';
+        btnToggleFocus.textContent = timerState === 'running' ? 'Pausar' : (timerState === 'paused' ? 'Reanudar' : 'Iniciar Descanso');
+      }
+    }
+  }
+
+  function startFocusSession() {
     if (focusTimerInterval) clearInterval(focusTimerInterval);
     
-    const end = Date.now() + durationMs;
+    // Si estaba inactivo, inicializar duración
+    if (timerState === 'idle') {
+      timeLeftMs = (timerType === 'work' ? workDurationMin : breakDurationMin) * 60 * 1000;
+    }
+    
+    const end = Date.now() + timeLeftMs;
+    timerState = 'running';
+
+    // Guardar focusEnd en el usuario y localstorage para sincronización
     if (currentUser) {
       currentUser.focusEnd = end;
       localStorage.setItem('pitufo_user', JSON.stringify(currentUser));
     }
     
-    socket.emit('start-focus', durationMs);
-    
-    if (btnToggleFocus) {
-      btnToggleFocus.textContent = 'Detener Enfoque';
-      btnToggleFocus.classList.add('active');
+    // Emitir a socket.io si es tiempo de trabajo (para mostrar el cerebro en el panel de compañeros)
+    if (timerType === 'work') {
+      socket.emit('start-focus', timeLeftMs);
+    } else {
+      // Si es descanso, quitamos el badge de enfoque
+      socket.emit('stop-focus');
     }
     
-    updateTimerDisplay(durationMs);
+    // Actualizar botones
+    if (btnToggleFocus) {
+      btnToggleFocus.textContent = 'Pausar';
+      btnToggleFocus.classList.add('active');
+    }
+    if (btnStopFocus) {
+      btnStopFocus.classList.remove('hidden');
+    }
     
+    resetFocusCardTheme();
+    updateTimerDisplay(timeLeftMs);
+    
+    // Reanudar audio de concentración si estaba activo antes de pausar
+    if (isAmbientPlaying && ambientAudio && ambientAudio.paused) {
+      ambientAudio.play().catch(err => console.log("Error al reanudar audio:", err));
+    }
+
     focusTimerInterval = setInterval(() => {
-      const left = Math.max(0, end - Date.now());
-      updateTimerDisplay(left);
+      timeLeftMs = Math.max(0, end - Date.now());
+      updateTimerDisplay(timeLeftMs);
       
-      if (left <= 0) {
+      // Actualizar periódicamente en localStorage por si acaso
+      if (currentUser && timerType === 'work') {
+        currentUser.focusEnd = Date.now() + timeLeftMs;
+        localStorage.setItem('pitufo_user', JSON.stringify(currentUser));
+      }
+      
+      if (timeLeftMs <= 0) {
+        clearInterval(focusTimerInterval);
+        focusTimerInterval = null;
         playDingSound();
-        showToast('Enfoque Pomodoro', '🍅', '¡Sesión de enfoque completada! Buen trabajo.', true);
-        stopFocusSession();
+        
+        // Pausar música al finalizar
+        if (ambientAudio) {
+          ambientAudio.pause();
+        }
+        
+        if (timerType === 'work') {
+          showToast('Enfoque Pomodoro', '🍅', '¡Sesión de enfoque completada! Hora de descansar.', true);
+          // Cambiar a modo descanso
+          timerType = 'break';
+          timerState = 'idle';
+          timeLeftMs = breakDurationMin * 60 * 1000;
+        } else {
+          showToast('Descanso Terminado', '☕', '¡Tu descanso ha terminado! A trabajar.', true);
+          // Cambiar a modo enfoque
+          timerType = 'work';
+          timerState = 'idle';
+          timeLeftMs = workDurationMin * 60 * 1000;
+        }
+        
+        if (currentUser) {
+          currentUser.focusEnd = null;
+          localStorage.setItem('pitufo_user', JSON.stringify(currentUser));
+        }
+        socket.emit('stop-focus');
+        
+        resetFocusCardTheme();
+        updateTimerDisplay(timeLeftMs);
+        
+        if (btnToggleFocus) {
+          btnToggleFocus.textContent = timerType === 'work' ? 'Iniciar Enfoque' : 'Iniciar Descanso';
+          btnToggleFocus.classList.remove('active');
+        }
+        if (btnStopFocus) {
+          btnStopFocus.classList.add('hidden');
+        }
       }
     }, 1000);
   }
 
-  function stopFocusSession() {
+  function pauseFocusSession() {
     if (focusTimerInterval) {
       clearInterval(focusTimerInterval);
       focusTimerInterval = null;
     }
     
+    timerState = 'paused';
+    
     if (currentUser) {
       currentUser.focusEnd = null;
       localStorage.setItem('pitufo_user', JSON.stringify(currentUser));
     }
+    socket.emit('stop-focus'); // Avisar que ya no está enfocado activamente
     
+    if (btnToggleFocus) {
+      btnToggleFocus.textContent = 'Reanudar';
+      btnToggleFocus.classList.remove('active');
+    }
+
+    // Pausar audio de concentración al pausar pomodoro
+    if (isAmbientPlaying && ambientAudio) {
+      ambientAudio.pause();
+    }
+  }
+
+  function stopAndResetFocusSession() {
+    if (focusTimerInterval) {
+      clearInterval(focusTimerInterval);
+      focusTimerInterval = null;
+    }
+    
+    timerState = 'idle';
+    timerType = 'work'; // Restablece a trabajo por defecto
+    timeLeftMs = workDurationMin * 60 * 1000;
+    
+    if (currentUser) {
+      currentUser.focusEnd = null;
+      localStorage.setItem('pitufo_user', JSON.stringify(currentUser));
+    }
     socket.emit('stop-focus');
+    
+    resetFocusCardTheme();
+    updateTimerDisplay(timeLeftMs);
     
     if (btnToggleFocus) {
       btnToggleFocus.textContent = 'Iniciar Enfoque';
       btnToggleFocus.classList.remove('active');
     }
-    if (focusTimerDisplay) {
-      focusTimerDisplay.textContent = '25:00';
+    if (btnStopFocus) {
+      btnStopFocus.classList.add('hidden');
     }
+
+    // Pausar y limpiar música
+    if (ambientAudio) {
+      ambientAudio.pause();
+    }
+    isAmbientPlaying = false;
+    updateAmbientPlayButtonUI();
   }
 
   function updateTimerDisplay(ms) {
@@ -1114,6 +1399,192 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) {
       console.error('Error al reproducir audio de campana:', err);
     }
+  }
+
+  // LÓGICA DE AUDIOS AMBIENTALES DE CONCENTRACIÓN
+  let ambientAudio = null;
+  let isAmbientPlaying = false;
+  let customLocalFileBlob = null;
+  let customUrl = "";
+
+  const btnAmbientPlay = document.getElementById('btn-ambient-play');
+  const ambientSoundSelect = document.getElementById('ambient-sound-select');
+  const ambientVolumeSlider = document.getElementById('ambient-volume-slider');
+  const ambientLocalWrapper = document.getElementById('ambient-local-wrapper');
+  const ambientLocalFile = document.getElementById('ambient-local-file');
+  const btnTriggerAmbientFile = document.getElementById('btn-trigger-ambient-file');
+  const ambientFileName = document.getElementById('ambient-file-name');
+  const ambientUrlWrapper = document.getElementById('ambient-url-wrapper');
+  const ambientUrlInput = document.getElementById('ambient-url-input');
+  const btnApplyAmbientUrl = document.getElementById('btn-apply-ambient-url');
+
+  // Direcciones de audio CDN de Google estables y Radio Lofi de RCAST
+  const soundUrls = {
+    rain: 'https://actions.google.com/sounds/v1/weather/rain_heavy_loud.ogg',
+    waves: 'https://actions.google.com/sounds/v1/water/sea_waves.ogg',
+    lofi: 'https://streaming.hotmixradio.com/hotmix-lofi-en-mp3'
+  };
+
+  function initAmbientAudio(src) {
+    if (ambientAudio) {
+      ambientAudio.pause();
+      ambientAudio = null;
+    }
+    
+    if (!src || src === 'none') {
+      isAmbientPlaying = false;
+      updateAmbientPlayButtonUI();
+      return;
+    }
+
+    ambientAudio = new Audio(src);
+    ambientAudio.loop = true;
+    
+    const vol = parseFloat(ambientVolumeSlider.value) / 100;
+    ambientAudio.volume = vol;
+
+    if (isAmbientPlaying) {
+      ambientAudio.play().catch(err => {
+        console.error("Error reproduciendo audio ambiental:", err);
+        isAmbientPlaying = false;
+        updateAmbientPlayButtonUI();
+      });
+    }
+  }
+
+  function updateAmbientPlayButtonUI() {
+    if (!btnAmbientPlay) return;
+    if (isAmbientPlaying) {
+      btnAmbientPlay.textContent = '⏸️ Pausar';
+      btnAmbientPlay.style.color = '#10b981';
+    } else {
+      btnAmbientPlay.textContent = '▶️ Iniciar';
+      btnAmbientPlay.style.color = '#c084fc';
+    }
+  }
+
+  if (btnAmbientPlay) {
+    btnAmbientPlay.addEventListener('click', () => {
+      const selected = ambientSoundSelect.value;
+      if (selected === 'none') {
+        showToast('Elige un sonido', '🎧', 'Por favor, selecciona un sonido o música en la lista.');
+        return;
+      }
+
+      if (isAmbientPlaying) {
+        isAmbientPlaying = false;
+        if (ambientAudio) ambientAudio.pause();
+      } else {
+        isAmbientPlaying = true;
+        if (!ambientAudio) {
+          setupAudioSourceAndPlay();
+        } else {
+          ambientAudio.play().catch(err => {
+            console.error("Error reproduciendo:", err);
+            isAmbientPlaying = false;
+          });
+        }
+      }
+      updateAmbientPlayButtonUI();
+    });
+  }
+
+  function setupAudioSourceAndPlay() {
+    const selected = ambientSoundSelect.value;
+    let src = '';
+    
+    if (selected === 'local') {
+      if (customLocalFileBlob) {
+        src = customLocalFileBlob;
+      } else {
+        showToast('Selecciona archivo', '📁', 'Por favor, elige tu archivo de música local.');
+        isAmbientPlaying = false;
+        updateAmbientPlayButtonUI();
+        return;
+      }
+    } else if (selected === 'url') {
+      if (customUrl) {
+        src = customUrl;
+      } else {
+        showToast('URL vacía', '🔗', 'Por favor, introduce una dirección de audio válida.');
+        isAmbientPlaying = false;
+        updateAmbientPlayButtonUI();
+        return;
+      }
+    } else {
+      src = soundUrls[selected];
+    }
+    
+    initAmbientAudio(src);
+  }
+
+  if (ambientSoundSelect) {
+    ambientSoundSelect.addEventListener('change', () => {
+      const val = ambientSoundSelect.value;
+      
+      ambientLocalWrapper.classList.toggle('hidden', val !== 'local');
+      ambientUrlWrapper.classList.toggle('hidden', val !== 'url');
+
+      if (val === 'none') {
+        isAmbientPlaying = false;
+        if (ambientAudio) {
+          ambientAudio.pause();
+          ambientAudio = null;
+        }
+        updateAmbientPlayButtonUI();
+      } else {
+        setupAudioSourceAndPlay();
+      }
+    });
+  }
+
+  if (btnTriggerAmbientFile) {
+    btnTriggerAmbientFile.addEventListener('click', () => {
+      ambientLocalFile.click();
+    });
+  }
+
+  if (ambientLocalFile) {
+    ambientLocalFile.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        if (customLocalFileBlob) {
+          URL.revokeObjectURL(customLocalFileBlob);
+        }
+        customLocalFileBlob = URL.createObjectURL(file);
+        ambientFileName.textContent = `🎵 ${file.name}`;
+        showToast('Música Cargada', '📁', `Se cargó "${file.name}" para tu sesión.`);
+        
+        isAmbientPlaying = true;
+        setupAudioSourceAndPlay();
+        updateAmbientPlayButtonUI();
+      }
+    });
+  }
+
+  if (btnApplyAmbientUrl) {
+    btnApplyAmbientUrl.addEventListener('click', () => {
+      const url = ambientUrlInput.value.trim();
+      if (url) {
+        customUrl = url;
+        showToast('Enlace Aplicado', '🔗', 'Se configuró tu dirección de audio personalizada.');
+        
+        isAmbientPlaying = true;
+        setupAudioSourceAndPlay();
+        updateAmbientPlayButtonUI();
+      } else {
+        showToast('Enlace Inválido', '⚠️', 'Introduce un enlace de audio válido.');
+      }
+    });
+  }
+
+  if (ambientVolumeSlider) {
+    ambientVolumeSlider.addEventListener('input', () => {
+      const vol = parseFloat(ambientVolumeSlider.value) / 100;
+      if (ambientAudio) {
+        ambientAudio.volume = vol;
+      }
+    });
   }
 
   // Intervalo global para actualizar en tiempo real los contadores de enfoque de los compañeros
