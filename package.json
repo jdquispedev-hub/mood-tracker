@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "app": "electron .",
-    "pack": "npx electron-packager . PitufoMoods --platform=darwin --arch=arm64 --overwrite"
+    "pack-m1": "npx electron-packager . PitufoMoods --platform=darwin --arch=arm64 --overwrite",
+    "pack-intel": "npx electron-packager . PitufoMoods --platform=darwin --arch=x64 --overwrite",
+    "pack-universal": "npx electron-packager . PitufoMoods --platform=darwin --arch=universal --overwrite"
   },
   "dependencies": {
     "express": "^4.19.2",
