@@ -1560,6 +1560,15 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      // Si seleccionó url y hay texto escrito, aplicarlo automáticamente antes de iniciar
+      if (selected === 'url') {
+        const url = ambientUrlInput.value.trim();
+        if (url && url !== customUrl) {
+          customUrl = url;
+          setupAudioSourceAndPlay();
+        }
+      }
+
       if (isAmbientPlaying) {
         isAmbientPlaying = false;
         pauseActiveAudio();
