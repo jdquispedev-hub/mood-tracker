@@ -1478,7 +1478,8 @@ document.addEventListener('DOMContentLoaded', () => {
         'autoplay': isAmbientPlaying ? 1 : 0,
         'controls': 0,
         'loop': 1,
-        'playlist': videoId
+        'playlist': videoId,
+        'origin': window.location.origin
       },
       events: {
         'onReady': (event) => {
