@@ -1257,8 +1257,8 @@ document.addEventListener('DOMContentLoaded', () => {
     updateTimerDisplay(timeLeftMs);
     
     // Reanudar audio de concentración si estaba activo antes de pausar
-    if (isAmbientPlaying && ambientAudio && ambientAudio.paused) {
-      ambientAudio.play().catch(err => console.log("Error al reanudar audio:", err));
+    if (isAmbientPlaying) {
+      playActiveAudio();
     }
 
     focusTimerInterval = setInterval(() => {
@@ -1277,9 +1277,7 @@ document.addEventListener('DOMContentLoaded', () => {
         playDingSound();
         
         // Pausar música al finalizar
-        if (ambientAudio) {
-          ambientAudio.pause();
-        }
+        pauseActiveAudio();
         
         if (timerType === 'work') {
           showToast('Enfoque Pomodoro', '🍅', '¡Sesión de enfoque completada! Hora de descansar.', true);
@@ -1335,9 +1333,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Pausar audio de concentración al pausar pomodoro
-    if (isAmbientPlaying && ambientAudio) {
-      ambientAudio.pause();
-    }
+    pauseActiveAudio();
   }
 
   function stopAndResetFocusSession() {
@@ -1368,9 +1364,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Pausar y limpiar música
-    if (ambientAudio) {
-      ambientAudio.pause();
-    }
+    pauseActiveAudio();
     isAmbientPlaying = false;
     updateAmbientPlayButtonUI();
   }
@@ -1406,6 +1400,12 @@ document.addEventListener('DOMContentLoaded', () => {
   let isAmbientPlaying = false;
   let customLocalFileBlob = null;
   let customUrl = "";
+  let activePlayerType = 'none'; // 'none', 'audio', 'youtube'
+
+  // Variables para la API de YouTube
+  let ytPlayer = null;
+  let isYtApiLoaded = false;
+  let pendingYtVideoId = null;
 
   const btnAmbientPlay = document.getElementById('btn-ambient-play');
   const ambientSoundSelect = document.getElementById('ambient-sound-select');
@@ -1424,6 +1424,94 @@ document.addEventListener('DOMContentLoaded', () => {
     waves: 'https://actions.google.com/sounds/v1/water/sea_waves.ogg',
     lofi: 'https://streaming.hotmixradio.com/hotmix-lofi-en-mp3'
   };
+
+  // Función para extraer ID de YouTube
+  function getYouTubeId(url) {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  }
+
+  // Carga dinámica de la API de YouTube Iframe
+  function loadYoutubeApiAndCreatePlayer(videoId) {
+    if (isYtApiLoaded) {
+      createYtPlayer(videoId);
+      return;
+    }
+
+    pendingYtVideoId = videoId;
+
+    // Callback global de YouTube
+    window.onYouTubeIframeAPIReady = () => {
+      isYtApiLoaded = true;
+      createYtPlayer(pendingYtVideoId || videoId);
+    };
+
+    const tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    const firstScriptTag = document.getElementsByTagName('script')[0];
+    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+  }
+
+  function createYtPlayer(videoId) {
+    if (ytPlayer) {
+      try {
+        ytPlayer.loadVideoById(videoId);
+        const vol = parseInt(ambientVolumeSlider.value) || 40;
+        ytPlayer.setVolume(vol);
+        if (isAmbientPlaying) {
+          ytPlayer.playVideo();
+        } else {
+          ytPlayer.pauseVideo();
+        }
+        return;
+      } catch (e) {
+        console.error("Error al cargar en reproductor existente:", e);
+      }
+    }
+
+    ytPlayer = new YT.Player('yt-player', {
+      height: '200',
+      width: '200',
+      videoId: videoId,
+      playerVars: {
+        'autoplay': isAmbientPlaying ? 1 : 0,
+        'controls': 0,
+        'loop': 1,
+        'playlist': videoId
+      },
+      events: {
+        'onReady': (event) => {
+          const vol = parseInt(ambientVolumeSlider.value) || 40;
+          event.target.setVolume(vol);
+          if (isAmbientPlaying) {
+            event.target.playVideo();
+          }
+        },
+        'onStateChange': (event) => {
+          if (event.data === YT.PlayerState.ENDED) {
+            event.target.playVideo();
+          }
+        }
+      }
+    });
+  }
+
+  function playActiveAudio() {
+    if (activePlayerType === 'youtube' && ytPlayer && typeof ytPlayer.playVideo === 'function') {
+      ytPlayer.playVideo();
+    } else if (activePlayerType === 'audio' && ambientAudio) {
+      ambientAudio.play().catch(err => console.log("Error al reproducir audio:", err));
+    }
+  }
+
+  function pauseActiveAudio() {
+    if (activePlayerType === 'youtube' && ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
+      ytPlayer.pauseVideo();
+    } else if (activePlayerType === 'audio' && ambientAudio) {
+      ambientAudio.pause();
+    }
+  }
 
   function initAmbientAudio(src) {
     if (ambientAudio) {
@@ -1473,16 +1561,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (isAmbientPlaying) {
         isAmbientPlaying = false;
-        if (ambientAudio) ambientAudio.pause();
+        pauseActiveAudio();
       } else {
         isAmbientPlaying = true;
-        if (!ambientAudio) {
+        
+        // Verificar si el player está inicializado
+        if (activePlayerType === 'youtube' && !ytPlayer) {
+          setupAudioSourceAndPlay();
+        } else if (activePlayerType === 'audio' && !ambientAudio) {
           setupAudioSourceAndPlay();
         } else {
-          ambientAudio.play().catch(err => {
-            console.error("Error reproduciendo:", err);
-            isAmbientPlaying = false;
-          });
+          playActiveAudio();
         }
       }
       updateAmbientPlayButtonUI();
@@ -1491,9 +1580,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function setupAudioSourceAndPlay() {
     const selected = ambientSoundSelect.value;
+    
+    // Detener reproducciones anteriores
+    if (ambientAudio) {
+      ambientAudio.pause();
+      ambientAudio = null;
+    }
+    if (ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
+      ytPlayer.pauseVideo();
+    }
+
     let src = '';
     
     if (selected === 'local') {
+      activePlayerType = 'audio';
       if (customLocalFileBlob) {
         src = customLocalFileBlob;
       } else {
@@ -1502,20 +1602,32 @@ document.addEventListener('DOMContentLoaded', () => {
         updateAmbientPlayButtonUI();
         return;
       }
+      initAmbientAudio(src);
     } else if (selected === 'url') {
-      if (customUrl) {
-        src = customUrl;
-      } else {
+      if (!customUrl) {
         showToast('URL vacía', '🔗', 'Por favor, introduce una dirección de audio válida.');
         isAmbientPlaying = false;
         updateAmbientPlayButtonUI();
         return;
       }
+      
+      const ytId = getYouTubeId(customUrl);
+      if (ytId) {
+        activePlayerType = 'youtube';
+        loadYoutubeApiAndCreatePlayer(ytId);
+      } else {
+        activePlayerType = 'audio';
+        initAmbientAudio(customUrl);
+      }
+    } else if (selected === 'none') {
+      activePlayerType = 'none';
+      isAmbientPlaying = false;
+      updateAmbientPlayButtonUI();
     } else {
+      activePlayerType = 'audio';
       src = soundUrls[selected];
+      initAmbientAudio(src);
     }
-    
-    initAmbientAudio(src);
   }
 
   if (ambientSoundSelect) {
@@ -1525,16 +1637,7 @@ document.addEventListener('DOMContentLoaded', () => {
       ambientLocalWrapper.classList.toggle('hidden', val !== 'local');
       ambientUrlWrapper.classList.toggle('hidden', val !== 'url');
 
-      if (val === 'none') {
-        isAmbientPlaying = false;
-        if (ambientAudio) {
-          ambientAudio.pause();
-          ambientAudio = null;
-        }
-        updateAmbientPlayButtonUI();
-      } else {
-        setupAudioSourceAndPlay();
-      }
+      setupAudioSourceAndPlay();
     });
   }
 
@@ -1567,22 +1670,25 @@ document.addEventListener('DOMContentLoaded', () => {
       const url = ambientUrlInput.value.trim();
       if (url) {
         customUrl = url;
-        showToast('Enlace Aplicado', '🔗', 'Se configuró tu dirección de audio personalizada.');
+        showToast('Enlace Aplicado', '🔗', 'Se configuró tu dirección de audio o YouTube.');
         
         isAmbientPlaying = true;
         setupAudioSourceAndPlay();
         updateAmbientPlayButtonUI();
       } else {
-        showToast('Enlace Inválido', '⚠️', 'Introduce un enlace de audio válido.');
+        showToast('Enlace Inválido', '⚠️', 'Introduce un enlace válido.');
       }
     });
   }
 
   if (ambientVolumeSlider) {
     ambientVolumeSlider.addEventListener('input', () => {
-      const vol = parseFloat(ambientVolumeSlider.value) / 100;
-      if (ambientAudio) {
-        ambientAudio.volume = vol;
+      const volVal = parseInt(ambientVolumeSlider.value) || 0;
+      
+      if (activePlayerType === 'youtube' && ytPlayer && typeof ytPlayer.setVolume === 'function') {
+        ytPlayer.setVolume(volVal);
+      } else if (activePlayerType === 'audio' && ambientAudio) {
+        ambientAudio.volume = volVal / 100;
       }
     });
   }

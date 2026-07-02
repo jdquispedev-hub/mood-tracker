@@ -130,7 +130,7 @@
                 <option value="waves">🌊 Olas del Mar</option>
                 <option value="lofi">🎹 Música Lofi (Radio 24/7)</option>
                 <option value="local">📁 Cargar archivo local (MP3/WAV)...</option>
-                <option value="url">🔗 Pegar enlace de audio...</option>
+                <option value="url">🔗 Enlace de Audio o YouTube...</option>
               </select>
 
               <!-- Inputs dinámicos -->
@@ -141,7 +141,7 @@
               </div>
 
               <div id="ambient-url-wrapper" class="hidden" style="display: flex; gap: 6px; margin-top: 4px;">
-                <input type="text" id="ambient-url-input" placeholder="Pegar URL .mp3 o Stream" style="flex: 1; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 5px 8px; color: white; font-size: 0.75rem; outline: none; font-family: var(--font-family);">
+                <input type="text" id="ambient-url-input" placeholder="Pegar URL .mp3 o enlace de YouTube" style="flex: 1; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 5px 8px; color: white; font-size: 0.75rem; outline: none; font-family: var(--font-family);">
                 <button type="button" id="btn-apply-ambient-url" style="background: #8b5cf6; border: none; border-radius: 6px; padding: 5px 10px; color: white; font-size: 0.75rem; font-weight: 600; cursor: pointer; font-family: var(--font-family);">Ok</button>
               </div>
 
@@ -314,6 +314,11 @@
   <div class="window-controls" id="global-window-controls">
     <button class="win-control-btn win-minimize-btn" id="win-minimize-btn" title="Minimizar Widget">&minus;</button>
     <button class="win-control-btn win-close-btn" id="win-close-btn" title="Cerrar Widget">&times;</button>
+  </div>
+
+  <!-- Contenedor invisible para reproductor de YouTube API -->
+  <div id="yt-player-container" style="position: absolute; top: -1000px; left: -1000px; width: 200px; height: 200px; pointer-events: none; opacity: 0; overflow: hidden;">
+    <div id="yt-player"></div>
   </div>
 
   <!-- Socket.io Cliente -->
